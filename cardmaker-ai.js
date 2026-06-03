@@ -45,10 +45,11 @@
   // 一页 freeform 示例：展示「自带 <style> + 自定义布局 + 设计令牌」的自由度（供 LLM 理解结构，非模板）
   var FREEFORM_SAMPLE = [
     "<style>",
-    ".s{display:flex;flex-direction:column;gap:30px;height:100%}",
-    ".s-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}",
-    ".s-card{background:rgba(255,255,255,.06);border:1px solid var(--cm-line);border-radius:20px;padding:28px}",
-    ".s-l{font-size:64px;font-weight:900;color:var(--cm-accent);line-height:1}",
+    "/* 关键：根容器 height:100% 撑满整页；主区 flex:1 占满剩余 → 内容铺满上下，不缩在中间 */",
+    ".s{display:flex;flex-direction:column;gap:34px;height:100%}",
+    ".s-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;flex:1;min-height:0}",
+    ".s-card{background:rgba(255,255,255,.06);border:1px solid var(--cm-line);border-radius:20px;padding:30px;display:flex;flex-direction:column;justify-content:center}",
+    ".s-l{font-size:72px;font-weight:900;color:var(--cm-accent);line-height:1;margin-bottom:8px}",
     "</style>",
     '<section class="card" data-theme="ocean">',
     '  <div class="s">',
@@ -92,6 +93,11 @@
       "- 【绝不要用 14~22px 这种网页字号】——在 " + P.w + "px 宽的画布上会小到看不清、导出后更糊；正文低于 ~28px 一律算太小。",
       "- 你在 <style> 里若重定义 --cm-text / --cm-h1 等令牌，值也要落在上面这个尺度，别照搬网页习惯的小号（这是最常见的翻车点）。",
       "- 拿不准就直接用 var(--cm-text)/var(--cm-h3)/var(--cm-h1)…（已按本比例调好，绝对安全）。",
+      "",
+      "【铺满整页 · 别让内容缩在中间】",
+      "- 这是【固定整页画布】(从上到下都要用上)，不是网页里的一小块组件。把内容铺满整页高度，别做成一小团飘在中央、上下大片空白。",
+      "- 做法：根容器 height:100%（撑满整页）+ flex 纵向布局，把内容【沿全高分布】——典型结构：顶部 眉题/标题区 → 中间 主内容区(flex:1 撑开占满剩余) → 底部 落款/金句/页码，首尾贴近上下边、主体填满中间。也可用 justify-content:space-between 把几块均匀铺开。",
+      "- 内容本就不多时，靠【加大字号 + 拉开间距/留白块 + 放大主视觉】把整页填实，而不是缩在中央。",
       "",
       "【风格 · 选一种，贯穿全套】",
       "- 为整套选定【一种】视觉风格并贯穿每页：统一的配色、字体、间距节奏、装饰母题。按主题气质自选，例如：现代编辑/杂志风、科技暗黑、极简大留白、商务咨询、国风雅致、活泼潮流、数据看板、胶片复古……",
@@ -491,6 +497,7 @@
       "- 没改到的页，一个字都不要输出。\n" +
       "你对要改的页有完全的版式/视觉自由（自由写 HTML、内联 CSS，或改 deck <style>），但保持与整套风格一致。画布 " + P.label + "（" + P.w + "×" + P.h + "px），运行时自动缩放兜底、保证文字对比度。\n" +
       "字号尺度（大画布、会被缩小观看，字要够大）：" + (PRESET_FONT[preset] || PRESET_FONT.xiaohongshu) + "；【绝不要 14~22px 网页小号】，正文低于 ~28px 算太小。若用户嫌字小，多半是 --cm-text/--cm-h1 等被设成了网页值，按上面的尺度调大。\n" +
+      "铺满整页：若用户说『内容缩在中间/上下空太多/铺满』，让根容器 height:100%、主内容区 flex:1 撑开，把内容沿全高分布（顶部标题→中间主体 flex:1→底部落款），别让短内容飘在中央。\n" +
       "禁止解释文字、``` 代码围栏、<html>/<head>/<body>、<script>、外链资源；换字体用 data-font。\n" +
       "本比例取向：" + (PRESET_TIP[preset] || PRESET_TIP.xiaohongshu)
     );
