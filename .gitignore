@@ -17,3 +17,6 @@ node_modules/
 
 # Claude Code 本地工具配置（预览/启动等，按机器而异）
 .claude/
+
+# 部署产物（CI 现拷现传，不入库）
+dist/

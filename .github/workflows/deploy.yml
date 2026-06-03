@@ -1,0 +1,31 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # CardMaker 零构建：静态文件就在根目录，只把运行时需要的拷进 dist/，
+      # 避免把 .git/.github/README 等传到 Pages。
+      - name: Assemble static site
+        run: |
+          mkdir -p dist/examples
+          cp index.html cardmaker.css cardmaker.js cardmaker-ai.js cardmaker.config.js dist/
+          cp examples/*.html dist/examples/
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=cardmaker --branch=main
