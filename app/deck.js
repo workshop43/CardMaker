@@ -12,8 +12,8 @@
 
    也可手动初始化：const app = new CardMaker({ root, preset });
    ============================================================= */
-(function (global) {
-  "use strict";
+"use strict";
+const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 IIFE 包裹
 
   var PRESETS = {
     xiaohongshu: { w: 1080, h: 1440, label: "小红书 3:4" },
@@ -22,72 +22,20 @@
     story: { w: 1080, h: 1920, label: "竖屏 9:16" },
   };
 
-  // 各比例的内置示例（左上角比例选择器切换时载入，方便预览不同比例的效果）
-  var DEMOS = {
-    xiaohongshu: `
-      <section class="card cm-middle" data-theme="sunset" data-font="song">
-        <div class="cm-kicker">每日精进</div>
-        <h1 class="cm-display">3 个<br>高效习惯</h1>
-        <p class="cm-lead cm-mt">把自律，变成肌肉记忆。</p>
-        <div class="cm-footer"><span>@CardMaker</span><span>← 滑动 →</span></div>
-      </section>
-      <section class="card" data-theme="sunset" data-font="song">
-        <div class="cm-kicker">行动清单</div><h2>今天就试</h2>
-        <ul class="cm-checklist cm-mt">
-          <li><strong>晨间三件事</strong>：起床先列今天最重要的三件事。</li>
-          <li><strong>专注 25 分钟</strong>：番茄钟起步，先做最难的。</li>
-          <li><strong>睡前一句话</strong>：写下今天的收获与明天第一步。</li>
-        </ul>
-        <div class="cm-footer"><span>@CardMaker</span><span>收藏 + 关注</span></div>
-      </section>`,
-    square: `
-      <section class="card cm-middle cm-text-center" data-theme="mint">
-        <div class="cm-kicker">数据说话</div>
-        <div class="cm-stat-num" style="font-size:200px">21<span style="font-size:.4em">天</span></div>
-        <p class="cm-lead">一个习惯成型的周期。</p>
-        <div class="cm-footer"><span>@CardMaker</span><span>每日精进</span></div>
-      </section>
-      <section class="card cm-middle" data-theme="mint">
-        <div class="cm-quote-mark">"</div>
-        <div class="cm-quote-text">你如何度过一天，<br>就如何度过一生。</div>
-        <p class="cm-muted cm-mt">— 安妮·迪拉德</p>
-      </section>`,
-    ppt: `
-      <style>.d-g{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
-      .d-c{background:rgba(255,255,255,.06);border:1px solid var(--cm-line);border-radius:18px;padding:26px}
-      .d-l{font-size:56px;font-weight:900;color:var(--cm-accent);line-height:1}</style>
-      <section class="card cm-middle cm-text-center" data-theme="night">
-        <div class="cm-kicker">营销方法论</div>
-        <h1 class="cm-display">FAB 卖点拆解法</h1>
-        <p class="cm-lead cm-mt">把产品语言，翻译成用户买点。</p>
-      </section>
-      <section class="card" data-theme="night">
-        <div class="cm-header"><div>FAB 黄金结构</div><div class="cm-sm">核心框架</div></div>
-        <div class="d-g">
-          <div class="d-c"><div class="d-l">F</div><h3>特征 Feature</h3><p style="color:var(--cm-muted)">客观存在的功能、参数、配置。</p></div>
-          <div class="d-c"><div class="d-l">A</div><h3>优势 Advantage</h3><p style="color:var(--cm-muted)">比竞品好在哪、相对优势。</p></div>
-          <div class="d-c"><div class="d-l">B</div><h3>利益 Benefit</h3><p style="color:var(--cm-muted)">对用户的价值与情感收益。</p></div>
-        </div>
-        <div class="cm-footer"><span>FAB 拆解法</span><span>2 / 2</span></div>
-      </section>`,
-    story: `
-      <section class="card cm-middle" data-theme="gradient" data-font="smiley">
-        <div class="cm-kicker">招聘海报</div>
-        <h1 class="cm-display">我们<br>在找你</h1>
-        <p class="cm-lead cm-mt">前端工程师 · 远程优先 · 弹性工作。</p>
-        <div class="cm-mt-lg"><span class="cm-tag">投递 → hi@cardmaker.dev</span></div>
-        <div class="cm-footer"><span>@CardMaker</span><span>扫码了解 ↓</span></div>
-      </section>
-      <section class="card" data-theme="gradient" data-font="smiley">
-        <div class="cm-kicker">你将拥有</div><h2>三件好东西</h2>
-        <ul class="cm-checklist cm-mt">
-          <li><strong>有意思的活</strong>：做让百万人用的产品。</li>
-          <li><strong>说人话的团队</strong>：扁平、透明、少开会。</li>
-          <li><strong>能成长</strong>：预算管够的学习与设备。</li>
-        </ul>
-        <div class="cm-footer"><span>@CardMaker</span><span>← 滑动 →</span></div>
-      </section>`,
-  };
+  // 各比例的内置示例已拆到 examples/<preset>.html（运行时不再内嵌示例内容）。
+  // 切比例时按需 fetch 注入；示例路径相对本模块（app/deck.js）解析，指向 ../examples/。
+  // 注意：需经 http 服务（本地 serve / Pages）访问，file:// 下浏览器禁止 fetch 本地文件；失败时仅切画布尺寸并告警。
+  var SELF_SRC = import.meta.url; // ES module 里没有 document.currentScript，用模块自身 URL
+  function demoURL(preset) {
+    try { return new URL("../examples/" + preset + ".html", SELF_SRC).href; }
+    catch (e) { return "../examples/" + preset + ".html"; }
+  }
+  // 从一段完整 deck 文档里抽出 [data-cardmaker] 容器的内部 HTML（卡片 + 可选 deck 级 <style>）
+  function extractDeck(html) {
+    var doc = new DOMParser().parseFromString(html, "text/html");
+    var deck = doc.querySelector("[data-cardmaker]");
+    return deck ? deck.innerHTML : "";
+  }
 
   // 出图依赖按需从 CDN 懒加载，零构建。
   var CDN = {
@@ -161,11 +109,13 @@
     if (!PRESETS[this.preset]) this.preset = "xiaohongshu";
     this.title = opts.title || this.source.getAttribute("data-title") || document.title || "deck";
     this.font = opts.font || this.source.getAttribute("data-font") || ""; // deck 级默认字体
+    // 只读浏览模式（导出的成品 HTML 用）：只翻页，不渲染工具栏/编辑器，不读写本地存档
+    this.view = (opts.mode || this.source.getAttribute("data-mode")) === "view";
     this.store = "cardmaker:" + location.pathname; // 自动存档键（按页面区分）
     this.index = 0;
     this.cards = [];
     this._build();
-    this._restore(); // 有上次的存档则恢复（刷新不丢失）
+    if (!this.view) this._restore(); // 浏览模式用文件里的内容，不恢复本地存档
     this.refresh();
 
     var self = this;
@@ -178,7 +128,7 @@
     document.addEventListener("keydown", function (e) { self._onKey(e); });
     // web 字体异步加载完成后，重新测量缩放（字体会影响排版尺寸）
     if (document.fonts && document.fonts.addEventListener) {
-      document.fonts.addEventListener("loadingdone", function () { self._autoFit(); });
+      document.fonts.addEventListener("loadingdone", function () { self._fit(); });
     }
   }
 
@@ -202,11 +152,13 @@
     this.btnSave = el("button", "cm-btn", "保存 HTML");
     this.btnExport = el("button", "cm-btn", "导出本页");
     this.btnExportAll = el("button", "cm-btn cm-primary", "导出全部");
-    bar.appendChild(this.btnEdit);
-    bar.appendChild(this.btnPresent);
-    bar.appendChild(this.btnSave);
-    bar.appendChild(this.btnExport);
-    bar.appendChild(this.btnExportAll);
+    if (!this.view) { // 浏览模式不要这些编辑/导出按钮
+      bar.appendChild(this.btnEdit);
+      bar.appendChild(this.btnPresent);
+      bar.appendChild(this.btnSave);
+      bar.appendChild(this.btnExport);
+      bar.appendChild(this.btnExportAll);
+    }
 
     // 主体（编辑器 + 舞台）
     var body = el("div", "cm-body");
@@ -221,7 +173,7 @@
     this.scaler.appendChild(this.cardsWrap);
     stage.appendChild(this.scaler);
 
-    body.appendChild(this.editor);
+    if (!this.view) body.appendChild(this.editor);
     body.appendChild(stage);
 
     // 导航
@@ -235,7 +187,7 @@
     nav.appendChild(this.btnNext);
     nav.appendChild(this.counter);
 
-    app.appendChild(bar);
+    if (!this.view) app.appendChild(bar); // 浏览模式无工具栏，只留舞台 + 翻页导航
     app.appendChild(body);
     app.appendChild(nav);
 
@@ -274,21 +226,18 @@
       var dot = el("button", "cm-dot");
       dot.onclick = function () { self.goTo(i); };
       self.dots.appendChild(dot);
-      // 先把作者内容包进 fitbox（装饰层留在外面垫底）
-      self._ensureFitbox(c);
       // 不再自动注入平台页码——页码交给作者/AI 自行设计，避免和内容里的页码重复。
       // （若作者主动写了 <div class="cm-page">，_render 仍会把它填成「页/总」，作为可选功能。）
     });
     this._applyFonts();
     this._render();
-    this._fixContrast(); // 同步先保证文字可读（不依赖 rAF，导出场景也稳）
     this._fit();
-    this._autoFit();
     this._save();
   };
 
   // ---------- 存档：自动存到 localStorage，刷新自动恢复 ----------
   CardMaker.prototype._save = function () {
+    if (this.view) return; // 浏览模式不写本地存档
     var self = this;
     clearTimeout(this._saveT);
     this._saveT = setTimeout(function () {
@@ -352,7 +301,6 @@
       return fetch(url).then(function (r) { if (!r.ok) throw 0; return r.text(); });
     }
     var links = Array.prototype.slice.call(document.querySelectorAll('link[rel="stylesheet"]'));
-    var scripts = Array.prototype.slice.call(document.querySelectorAll("script[src]"));
     var cssJobs = links.map(function (l) {
       if (l.href && sameOrigin(l.href)) {
         return fetchText(l.href).then(function (t) { return "<style>\n" + t + "\n</style>"; })
@@ -360,22 +308,20 @@
       }
       return Promise.resolve('<link rel="stylesheet" href="' + l.href + '">');
     });
-    var jsJobs = scripts.map(function (s) {
-      if (s.src && sameOrigin(s.src)) {
-        return fetchText(s.src).then(function (t) {
-          // 转义源码里字面量的 </script>（注释/字符串里常有），否则会提前关闭内联脚本、
-          // 后面的源码被浏览器当成正文渲染（导出 HTML 第一页出现一堆"代码乱码"）。
-          // JS 字符串里 <\/script 的值仍是 </script，行为不变。
-          return "<scr" + "ipt>\n" + t.replace(/<\/(script)/gi, "<\\/$1") + "\n</scr" + "ipt>";
-        }).catch(function () { return '<scr' + 'ipt src="' + s.src + '"></scr' + "ipt>"; });
-      }
-      return Promise.resolve('<scr' + 'ipt src="' + s.src + '"></scr' + "ipt>");
-    });
+    // 导出成品自包含 + 极简：只内联【只读 viewer】（翻页/缩放/字体），剥掉编辑器/出图/AI/切比例/
+    // 存档等成品用不到的代码——导出文件干净得多。viewer.js 是普通 IIFE（非 module），与 deck.js 同目录。
+    // 转义源码里字面 </script> 避免提前闭合脚本标签。
+    var viewerURL = new URL("./viewer.js", SELF_SRC).href;
+    var jsJobs = [
+      fetchText(viewerURL).then(function (t) {
+        return "<scr" + "ipt>\n" + t.replace(/<\/(script)/gi, "<\\/$1") + "\n</scr" + "ipt>";
+      }).catch(function () { return '<scr' + 'ipt src="' + viewerURL + '"></scr' + "ipt>"; }),
+    ];
 
     this._toast("正在打包 HTML…");
     Promise.all([Promise.all(cssJobs), Promise.all(jsJobs)]).then(function (res) {
       var esc = function (s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); };
-      var deck = '<div data-cardmaker data-preset="' + self.preset + '"' +
+      var deck = '<div data-cardmaker data-mode="view" data-preset="' + self.preset + '"' +
         (self.font ? ' data-font="' + self.font + '"' : "") +
         ' data-title="' + esc(self.title) + '">\n' + self.getHTML() + "\n</div>";
       var doc = '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n<meta charset="UTF-8">\n' +
@@ -401,141 +347,8 @@
     });
   };
 
-  // 取卡片下「直接子级」的 fitbox
-  function fitboxOf(card) {
-    for (var n = card.firstChild; n; n = n.nextSibling) {
-      if (n.nodeType === 1 && n.classList.contains("cm-fitbox")) return n;
-    }
-    return null;
-  }
-
-  // 取卡片下指定类名的「直接子级」（排除 fitbox 内部）
-  function directChildByClass(card, cls) {
-    for (var n = card.firstChild; n; n = n.nextSibling) {
-      if (n.nodeType === 1 && n.classList.contains(cls) && !n.classList.contains("cm-fitbox")) return n;
-    }
-    return null;
-  }
-
-  // 给卡片注入内容层：绝对铺满、复刻卡片 flex 布局，承载除装饰层外的全部作者内容
-  // （抽成模块函数，主舞台与「生成预览缩略图」共用，保证两边渲染一致）
-  function ensureFitbox(card) {
-    if (fitboxOf(card)) return;
-    var box = el("div", "cm-fitbox");
-    var nodes = Array.prototype.slice.call(card.childNodes);
-    nodes.forEach(function (n) {
-      if (n.nodeType === 1 && (n.classList.contains("cm-deco") || n.classList.contains("cm-page") || n.classList.contains("cm-footer") || n.classList.contains("cm-header"))) return;
-      box.appendChild(n); // 正文移入 fitbox；装饰层/页码/footer/header 留在卡片上、不缩放
-    });
-    // 把卡片上的对齐类（cm-middle/cm-center/cm-text-center…）带到 fitbox（它才是 flex 容器）
-    Array.prototype.forEach.call(card.classList, function (c) {
-      if (c !== "card" && c !== "is-active" && c !== "cm-fitted") box.classList.add(c);
-    });
-    card.classList.add("cm-fitted");
-    card.appendChild(box);
-  }
-  CardMaker.prototype._ensureFitbox = function (card) { ensureFitbox(card); };
-
-  // ---- 对比度护栏：背景被改深/改浅但文字色没跟着改时（LLM 常犯），自动翻成可读色 ----
-  function _relLum(r, g, b) { // WCAG 相对亮度
-    var a = [r, g, b].map(function (v) {
-      v /= 255;
-      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-    });
-    return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
-  }
-  function _colorsIn(str) { // 从字符串里抠出所有 rgb/rgba（忽略近乎透明的）
-    var out = [], m, re = /rgba?\(([^)]+)\)/g;
-    while ((m = re.exec(str))) {
-      var p = m[1].split(",").map(parseFloat);
-      if (p.length >= 3 && (p[3] === undefined || p[3] > 0.1)) out.push(p);
-    }
-    return out;
-  }
-  function _avgLum(str) {
-    var cols = _colorsIn(str);
-    if (!cols.length) return null;
-    var s = 0;
-    cols.forEach(function (c) { s += _relLum(c[0], c[1], c[2]); });
-    return s / cols.length;
-  }
-  function _contrast(a, b) { var hi = Math.max(a, b), lo = Math.min(a, b); return (hi + 0.05) / (lo + 0.05); }
-
-  // 逐卡体检：背景与文字对比度过低就改 --cm-fg/--cm-muted（只在真有问题时介入，不动配好的主题）
-  function fixContrastCard(c) {
-    var cs = getComputedStyle(c);
-    var bgL = _avgLum(cs.backgroundColor + " " + cs.backgroundImage);
-    if (bgL == null) return; // 完全透明：交给导出底色，跳过
-    var fg = _colorsIn(cs.color)[0];
-    if (!fg) return;
-    var fgL = _relLum(fg[0], fg[1], fg[2]);
-    if (_contrast(fgL, bgL) >= 3) return; // 够清晰，别碰
-    var dark = bgL < 0.4; // 文字看不清：深底配浅字、浅底配深字
-    c.style.setProperty("--cm-fg", dark ? "#ffffff" : "#141414");
-    c.style.setProperty("--cm-muted", dark ? "rgba(255,255,255,.72)" : "rgba(20,20,20,.62)");
-  }
-  CardMaker.prototype._fixContrast = function () { this.cards.forEach(fixContrastCard); };
-
-  // 内容溢出时只缩放 fitbox，保证不裁切；缩得过小则标记提示精简
-  // 单卡自适配：内容溢出时只缩放 fitbox，保证不裁切；缩得过小则标记提示精简
-  function fitCard(c) {
-    var box = fitboxOf(c);
-    if (!box) return;
-    // 用 inset 精确框定内容区（页眉之下、页脚之上），并对 fitbox 开 overflow:hidden：
-    // 内容再多也只会在「页脚之上」被干净裁切，绝不与 footer/header 重叠。
-    var basePad = parseFloat(getComputedStyle(c).getPropertyValue("--cm-pad")) || 64;
-    var gap = Math.max(36, Math.round(basePad * 0.5));
-    var footer = directChildByClass(c, "cm-footer");
-    var header = directChildByClass(c, "cm-header");
-    function chromeReserve(node, edge) {
-      if (!node) return basePad;
-      var off = parseFloat(getComputedStyle(node)[edge]) || basePad; // footer 的 bottom / header 的 top 偏移
-      return off + node.offsetHeight + gap;
-    }
-    var botInset = chromeReserve(footer, "bottom");
-    box.style.padding = "0"; // 边距改由 inset 提供，避免双重边距
-    box.style.left = basePad + "px";
-    box.style.right = basePad + "px";
-    box.style.top = chromeReserve(header, "top") + "px";
-    box.style.bottom = botInset + "px";
-    // 量取内容自然高度：取消缩放 + 顶对齐，并让 fitbox 暂时按内容自然高度撑开。
-    //（关键：居中布局会让 scrollHeight 少算超出部分；用 bottom:auto 撑开来测准，避免误判“放得下”而截断）
-    box.style.transform = "none";
-    var prevJ = box.style.justifyContent;
-    var availH = box.clientHeight, availW = box.clientWidth; // 内容区尺寸（含 inset）
-    box.style.justifyContent = "flex-start";
-    box.style.bottom = "auto";
-    var needH = box.scrollHeight, needW = box.scrollWidth; // 内容自然总高/宽
-    box.style.bottom = botInset + "px"; // 还原内容区
-    box.style.justifyContent = prevJ;
-    var s = 1;
-    if (needH > availH + 1) s = Math.min(s, availH / needH);
-    if (needW > availW + 1) s = Math.min(s, availW / needW);
-    // 内容放不下就缩小字号，但不低于最小字号（中文可读底线 22px）。
-    var MIN_BODY = 22;
-    var bodyPx = parseFloat(getComputedStyle(box).fontSize) || 30;
-    var floor = Math.min(1, MIN_BODY / bodyPx);
-    var needed = s; // 真正需要的缩放（可能小于下限）
-    if (s < 1) {
-      s = Math.max(s * 0.97, floor); // 留安全余量；不小于最小字号对应的缩放
-      box.style.transform = "scale(" + s + ")";
-    } else {
-      box.style.transform = "none";
-    }
-    // 连最小字号都放不下 → 该页内容过多（会截断），编辑态标红提示精简或用「✦ 修改」
-    if (needed < floor - 0.01) c.setAttribute("data-overflow", "");
-    else c.removeAttribute("data-overflow");
-  }
-  CardMaker.prototype._autoFit = function () {
-    var cards = this.cards;
-    var raf = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
-    raf(function () {
-      cards.forEach(function (c) { fixContrastCard(c); fitCard(c); }); // 先保证可读，再缩放
-    });
-  };
-
-  // 静态：把一段 deck HTML 的【最后一张卡】渲染成等比缩略图（含 deck 级 <style> + fitbox 居中 +
-  // auto-fit 缩放 + 对比度护栏 + 各比例字号），用于「生成中」实时预览，确保和主舞台渲染一致。
+  // 静态：把一段 deck HTML 的【最后一张卡】渲染成等比缩略图（含 deck 级 <style> + 各比例字号），
+  // 用于「生成中」实时预览，确保和主舞台渲染一致。无运行时缩放——卡片是什么样就预览什么样。
   CardMaker.renderThumb = function (deckHTML, preset, mount, widthPx) {
     if (!mount) return;
     var P = PRESETS[preset] || PRESETS.xiaohongshu;
@@ -561,10 +374,6 @@
     scope.appendChild(inner);
     mount.innerHTML = "";
     mount.appendChild(scope);
-    // 复刻主舞台：fitbox + 对比度 + auto-fit（需在 DOM 中测量，放到下一帧）
-    ensureFitbox(card);
-    var raf = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
-    raf(function () { fixContrastCard(card); fitCard(card); });
   };
 
   CardMaker.prototype._render = function () {
@@ -596,11 +405,6 @@
     if (i < 0 || i >= this.cards.length) return;
     this.index = i;
     this._render();
-    // 切到该页后立即重新适配它：初次 _autoFit 时非活动页是隐藏/绝对定位的，
-    // height:100% / flex:1 这类布局在隐藏态测量不准，导致"第一页对、第二页起错位"。
-    // _render 已把它设为活动（可见/在流中），此处同步测量即准确，无需等 rAF。
-    var card = this.cards[i];
-    if (card) { fixContrastCard(card); fitCard(card); }
     this._syncEditor(); // 编辑中时，切换卡片同步编辑器内容
   };
   CardMaker.prototype.next = function () { this.goTo(this.index + 1); };
@@ -655,19 +459,12 @@
     }, 220);
   };
 
-  // 当前卡片的源码（拆掉运行时注入的 fitbox/角标，还原成作者写的干净 HTML）
+  // 当前卡片的源码（去掉运行时角标，还原成作者写的干净 HTML）
   CardMaker.prototype._cardHTML = function (card) {
     var k = card.cloneNode(true);
     var pg = k.querySelector(".cm-page");
     if (pg) pg.remove();
     k.classList.remove("is-active");
-    k.classList.remove("cm-fitted");
-    // 拆 fitbox：把其中的作者内容移回卡片，删除 fitbox 本身
-    var box = fitboxOf(k);
-    if (box) {
-      while (box.firstChild) k.appendChild(box.firstChild);
-      box.remove();
-    }
     return k.outerHTML;
   };
   CardMaker.prototype._currentCardHTML = function () {
@@ -756,8 +553,6 @@
     // 临时显示该卡片（导出非当前页时）
     var wasActive = card.classList.contains("is-active");
     card.classList.add("is-active");
-    // 导出前按"可见态"重新适配该卡：否则非当前页可能用的是初次隐藏态测出的错误 fit。
-    fixContrastCard(card); fitCard(card);
     var opts = {
       width: p.w,
       height: p.h,
@@ -854,7 +649,7 @@
   // 取整个 deck 的源码（去掉运行时角标）
   CardMaker.prototype.getHTML = function () {
     var self = this;
-    // 串联 cardsWrap 的全部直接子节点：卡片拆掉 fitbox 还原，其它元素（如 deck 级 <style>）原样保留
+    // 串联 cardsWrap 的全部直接子节点：卡片还原成干净源码，其它元素（如 deck 级 <style>）原样保留
     var parts = [];
     Array.prototype.forEach.call(this.cardsWrap.childNodes, function (n) {
       if (n.nodeType !== 1) return;
@@ -923,18 +718,29 @@
     this._fit();
   };
 
-  // 切到某比例并载入其内置示例（供左上角比例选择器使用）
+  // 切到某比例并载入其示例（示例独立存放在 examples/<preset>.html，按需 fetch 注入）
   CardMaker.prototype.loadExample = function (preset) {
     if (!PRESETS[preset]) return;
     this.setPreset(preset);
-    if (DEMOS[preset]) { this.setHTML(DEMOS[preset]); this.goTo(0); }
+    var self = this, url = demoURL(preset);
+    fetch(url)
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+      .then(function (html) {
+        var inner = extractDeck(html);
+        if (!inner) throw new Error("示例里没有 [data-cardmaker] 容器");
+        self.setHTML(inner);
+        self.goTo(0);
+      })
+      .catch(function (e) {
+        console.warn("[CardMaker] 载入示例失败（" + url + "）：" + e.message +
+          "；已仅切换画布比例。file:// 下请改用本地服务（http）打开。");
+      });
   };
 
   // 设置整个 deck 的默认字体（"" 恢复系统字体）
   CardMaker.prototype.setFont = function (key) {
     this.font = key && FONTS[key] ? key : "";
     this._applyFonts();
-    this._autoFit();
   };
 
   CardMaker.PRESETS = PRESETS;
@@ -968,4 +774,5 @@
   }
 
   global.CardMaker = CardMaker;
-})(window);
+
+export { CardMaker };

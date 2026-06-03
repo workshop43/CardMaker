@@ -52,7 +52,7 @@
   --cm-h3: 46px;    --cm-h2: 60px;       --cm-h1: 84px;       --cm-display: 112px;
 }
 /* 小红书内容页：拉开元素间距，让内容铺开、不挤成一小团飘在中间 */
-.cm-app[data-preset="xiaohongshu"] .cm-fitbox:not(.cm-middle) { gap: 24px; }
+.cm-app[data-preset="xiaohongshu"] .card:not(.cm-middle) { gap: 24px; }
 .cm-app[data-preset="xiaohongshu"] .cm-checklist { gap: 44px; }
 .cm-app[data-preset="xiaohongshu"] .card p { margin-bottom: 1.15em; }
 .cm-app[data-preset="xiaohongshu"] .cm-divider { margin: 40px 0; }
@@ -246,6 +246,8 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  /* 默认 safe center：内容少时垂直居中，超高时自动顶对齐保住标题 */
+  justify-content: safe center;
   padding: var(--cm-pad);
   background: var(--cm-card-bg);
   color: var(--cm-fg);
@@ -264,28 +266,7 @@
   text-autospace: normal;
 }
 .card * { box-sizing: border-box; }
-/* 装饰层用 z-index:-1 垫底（配合 .card 的 isolation），内容天然浮于其上，
-   不要再用「给所有子级设 position:relative」的写法——那会覆盖 fitbox 的 absolute。 */
-
-/* 内容层：运行时注入，绝对铺满卡片并复刻卡片的 flex 布局与内边距。
-   溢出时只缩放它（不动卡片盒/背景/导出尺寸），保证内容永不被裁切。
-   对齐类（cm-middle 等）由运行时从卡片复制到本层生效。 */
-.cm-fitbox {
-  position: absolute;
-  inset: 0;
-  z-index: 1; /* 高于装饰层(-1)，低于角标(2) */
-  display: flex;
-  flex-direction: column;
-  /* safe center：放得下时垂直居中（内容少不头重脚轻）；一旦超高，自动改为顶对齐而非两头都切，
-     保住标题/首行，只切最不重要的末尾——避免"标题被吃掉"的惨状。 */
-  justify-content: safe center;
-  padding: var(--cm-pad);
-  box-sizing: border-box;
-  overflow: hidden; /* 内容溢出时在内容区边界裁切，绝不漫到 footer/header 上 */
-  transform-origin: center center;
-}
-.cm-fitbox.cm-top { justify-content: flex-start; } /* 需要顶对齐时显式覆盖 */
-.card.cm-fitted { padding: 0; } /* 内边距交给 fitbox，避免双重 padding */
+/* 装饰层用 z-index:-1 垫底（配合 .card 的 isolation），内容天然浮于其上。 */
 /* 标题：平衡换行 + 中文按禁则换行（line-break:strict）。
    注意：中文标题不能用 word-break:keep-all——中文无空格会被当成一个整词而完全不换行、溢出被裁。 */
 .card h1, .card h2, .card h3, .cm-display, .cm-quote-text {
@@ -312,7 +293,8 @@
 
 /* ---------- 6. 实用类（给 LLM 与作者的拼装件） ---------- */
 .cm-center { justify-content: center; align-items: flex-start; }
-.cm-middle { justify-content: safe center; } /* 同 fitbox：超高时顶对齐而非两头切 */
+.cm-middle { justify-content: safe center; } /* 超高时顶对齐而非两头切 */
+.cm-top { justify-content: flex-start; } /* 顶对齐（覆盖 .card 默认的 safe center） */
 .cm-fill { flex: 1; min-height: 0; }
 .cm-row { display: flex; gap: var(--cm-gap); }
 .cm-col { display: flex; flex-direction: column; gap: var(--cm-gap); }
@@ -346,8 +328,8 @@
 .cm-tag.cm-ghost { background: transparent; border: 2px solid var(--cm-accent); color: var(--cm-accent); }
 .cm-num { font-size: 120px; font-weight: 900; line-height: 1.3; color: var(--cm-accent); letter-spacing: -2px; }
 
-/* footer / header 是固定的结构性 chrome：绝对定位、尺寸位置恒定，
-   运行时把它们留在卡片上、不放进 fitbox，因此不受 auto-fit 缩放影响，每页一致。 */
+/* footer / header 是固定的结构性 chrome：绝对定位钉在卡片边缘，每页同位置。
+   正文不会自动避让它们，作者需自己留出上下空间。 */
 .cm-footer {
   position: absolute;
   left: var(--cm-pad);
@@ -400,7 +382,7 @@
   position: absolute;
   right: var(--cm-pad);
   bottom: calc(var(--cm-pad) - 28px);
-  z-index: 2; /* 浮于 fitbox 之上，保持可见 */
+  z-index: 2; /* 浮于正文之上，保持可见 */
   font-size: var(--cm-text-sm);
   color: var(--cm-muted);
 }

@@ -20,7 +20,8 @@ jobs:
       - name: Assemble static site
         run: |
           mkdir -p dist/examples
-          cp index.html cardmaker.css cardmaker.js cardmaker-ai.js cardmaker.config.js dist/
+          cp index.html cardmaker.css dist/
+          cp -r app dist/
           cp examples/*.html dist/examples/
 
       - name: Create Pages project (idempotent) & deploy

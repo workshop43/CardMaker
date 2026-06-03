@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>21 天习惯（方形示例）</title>
+  <link rel="stylesheet" href="../cardmaker.css" />
+</head>
+<body>
+  <!-- 方形 1:1 示例：大数据封面 + 金句页。整套同一主题 mint。 -->
+  <div data-cardmaker data-preset="square" data-title="21天习惯">
+
+    <!-- 大数据封面：超大数字 + 单位下标 -->
+    <section class="card cm-middle cm-text-center" data-theme="mint">
+      <div class="cm-kicker">数据说话</div>
+      <div class="cm-stat-num" style="font-size:200px">21<span style="font-size:.4em">天</span></div>
+      <p class="cm-lead">一个习惯成型的周期。</p>
+      <div class="cm-footer"><span>@CardMaker</span><span>每日精进</span></div>
+    </section>
+
+    <!-- 金句页：大引号 + 出处 -->
+    <section class="card cm-middle" data-theme="mint">
+      <div class="cm-quote-mark">"</div>
+      <div class="cm-quote-text">你如何度过一天，<br>就如何度过一生。</div>
+      <p class="cm-muted cm-mt">— 安妮·迪拉德</p>
+    </section>
+
+  </div>
+  <script type="module" src="../app/main.js"></script>
+</body>
+</html>

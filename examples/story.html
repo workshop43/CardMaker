@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>我们在找你（竖屏示例）</title>
+  <link rel="stylesheet" href="../cardmaker.css" />
+</head>
+<body>
+  <!-- 竖屏 9:16 示例：招聘海报。整套同一主题 gradient，全局得意黑标题字。 -->
+  <div data-cardmaker data-preset="story" data-title="我们在找你" data-font="smiley">
+
+    <!-- 封面：大标题 + 标签 -->
+    <section class="card cm-middle" data-theme="gradient" data-font="smiley">
+      <div class="cm-kicker">招聘海报</div>
+      <h1 class="cm-display">我们<br>在找你</h1>
+      <p class="cm-lead cm-mt">前端工程师 · 远程优先 · 弹性工作。</p>
+      <div class="cm-mt-lg"><span class="cm-tag">投递 → hi@cardmaker.dev</span></div>
+      <div class="cm-footer"><span>@CardMaker</span><span>扫码了解 ↓</span></div>
+    </section>
+
+    <!-- 清单页：你将拥有 -->
+    <section class="card" data-theme="gradient" data-font="smiley">
+      <div class="cm-kicker">你将拥有</div><h2>三件好东西</h2>
+      <ul class="cm-checklist cm-mt">
+        <li><strong>有意思的活</strong>：做让百万人用的产品。</li>
+        <li><strong>说人话的团队</strong>：扁平、透明、少开会。</li>
+        <li><strong>能成长</strong>：预算管够的学习与设备。</li>
+      </ul>
+      <div class="cm-footer"><span>@CardMaker</span><span>← 滑动 →</span></div>
+    </section>
+
+  </div>
+  <script type="module" src="../app/main.js"></script>
+</body>
+</html>
