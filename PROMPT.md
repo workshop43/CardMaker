@@ -65,6 +65,21 @@
 - 或用 `justify-content:space-between` 把几块均匀铺开。
 - 内容本就不多时，靠**加大字号 + 拉开间距 + 放大主视觉**填实整页，而不是缩在中央。
 
+## ⚠ 固定页眉/页脚：只能用 `cm-header` / `cm-footer`
+
+想要每页**同位置、不随内容缩放**的页眉/页脚，**必须**用这两个类——运行时会把它们绝对定位钉在卡片上/下边、**排除在内容自适配缩放之外**、所有页位置完全一致，正文区自动避开它们（无需手动 padding）。
+
+```html
+<section class="card">
+  <div class="cm-header"><div>系列名 · 本页标题</div><div>右上角</div></div>
+  …主内容（自动避开页眉页脚）…
+  <div class="cm-footer"><span>@账号</span><span>02 / 08</span></div>
+</section>
+```
+
+- **别用自己的类**（如 `.page-header`）+ `position:absolute` 写固定页眉页脚——那会被包进**会缩放的内容层**，导致每页漂移、对不齐（最常见的错）。固定 chrome 只认 `cm-header`/`cm-footer` 这两个名字。
+- 样式自由：在 `.card .cm-header` / `.card .cm-footer` 里改字号、颜色、对齐、边框等。
+
 ## 自由设计，但选一种风格贯穿全套
 
 做成「读完即懂的文档型」——每页是能独立读懂的小章节：清晰标题 + 结构化、有层级的内容（不是一句话一页），逐页变换版式。为整套选定**一种**视觉风格（配色/字体/间距/母题）并贯穿。配色用现成 `data-theme`，或在你的 `<style>` 里用设计令牌（`--cm-fg/--cm-bg/--cm-card-bg/--cm-accent/--cm-muted/--cm-line`、字阶 `--cm-h1/--cm-h2/--cm-h3/--cm-text`、间距 `--cm-pad/--cm-gap`，已按比例调好）自定义。

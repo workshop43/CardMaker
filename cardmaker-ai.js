@@ -99,6 +99,12 @@
       "- 做法：根容器 height:100%（撑满整页）+ flex 纵向布局，把内容【沿全高分布】——典型结构：顶部 眉题/标题区 → 中间 主内容区(flex:1 撑开占满剩余) → 底部 落款/金句/页码，首尾贴近上下边、主体填满中间。也可用 justify-content:space-between 把几块均匀铺开。",
       "- 内容本就不多时，靠【加大字号 + 拉开间距/留白块 + 放大主视觉】把整页填实，而不是缩在中央。",
       "",
+      "【固定页眉/页脚 · 必须用 cm-header / cm-footer，别自己写】",
+      "- 想要每页【同位置、不随内容缩放】的页眉/页脚：用 class cm-header（钉卡片上边）、cm-footer（钉卡片下边）。运行时会把它们绝对定位钉在卡片边缘、【排除在内容自适配缩放之外】、所有页位置完全一致；正文区自动避开它们，你无需手动加 padding。",
+      "- 【绝不要】用你自己的类（如 .page-header）+ position:absolute 去写固定页眉页脚——那会被包进【会缩放的内容层】，导致每页漂移、对不齐（这是最常见的错）。固定 chrome 只认 cm-header/cm-footer 这两个名字。",
+      "- 样式随便改：在 .card .cm-header / .card .cm-footer 里设字号、颜色、对齐、边框等（默认是 flex 两端对齐的小字条）。结构例：",
+      '  <section class="card"><div class="cm-header"><div>系列名 · 本页标题</div><div>右上角小字</div></div> …主内容(自动避开页眉页脚)… <div class="cm-footer"><span>@账号</span><span>02 / 08</span></div></section>',
+      "",
       "【风格 · 选一种，贯穿全套】",
       "- 为整套选定【一种】视觉风格并贯穿每页：统一的配色、字体、间距节奏、装饰母题。按主题气质自选，例如：现代编辑/杂志风、科技暗黑、极简大留白、商务咨询、国风雅致、活泼潮流、数据看板、胶片复古……",
       "- 配色两种方式任选：(a) 直接用现成 data-theme 调色板：light dark warm ink mint gradient ocean sky sunset forest paper bold pastel tech cream night（深色风就选深色主题，背景+文字对比已配好）；(b) 在你的 <style>/内联里用设计令牌自定义。",
@@ -498,6 +504,7 @@
       "你对要改的页有完全的版式/视觉自由（自由写 HTML、内联 CSS，或改 deck <style>），但保持与整套风格一致。画布 " + P.label + "（" + P.w + "×" + P.h + "px），运行时自动缩放兜底、保证文字对比度。\n" +
       "字号尺度（大画布、会被缩小观看，字要够大）：" + (PRESET_FONT[preset] || PRESET_FONT.xiaohongshu) + "；【绝不要 14~22px 网页小号】，正文低于 ~28px 算太小。若用户嫌字小，多半是 --cm-text/--cm-h1 等被设成了网页值，按上面的尺度调大。\n" +
       "铺满整页：若用户说『内容缩在中间/上下空太多/铺满』，让根容器 height:100%、主内容区 flex:1 撑开，把内容沿全高分布（顶部标题→中间主体 flex:1→底部落款），别让短内容飘在中央。\n" +
+      "固定页眉页脚：若用户要『固定的/不漂移的页眉页脚』，必须用 class cm-header（上）/ cm-footer（下）——运行时把它们钉在卡片边缘、不参与缩放、各页一致；【别用 .page-header 等自写的 position:absolute】（会被包进缩放层而漂移）。样式可在 .card .cm-header/.cm-footer 里自由覆盖。\n" +
       "禁止解释文字、``` 代码围栏、<html>/<head>/<body>、<script>、外链资源；换字体用 data-font。\n" +
       "本比例取向：" + (PRESET_TIP[preset] || PRESET_TIP.xiaohongshu)
     );
