@@ -23,9 +23,11 @@ jobs:
           cp index.html cardmaker.css cardmaker.js cardmaker-ai.js cardmaker.config.js dist/
           cp examples/*.html dist/examples/
 
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=cardmaker --branch=main
+      - name: Create Pages project (idempotent) & deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # 首次部署前确保项目存在；已存在则忽略报错（幂等）
+          npx -y wrangler@latest pages project create cardmaker --production-branch=main || echo "项目已存在，跳过创建"
+          npx -y wrangler@latest pages deploy dist --project-name=cardmaker --branch=main --commit-dirty=true
