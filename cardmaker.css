@@ -1,0 +1,728 @@
+/* =============================================================
+   CardMaker — 纯静态 HTML 卡片设计 / 放映 / 出图运行时
+   一个 deck = 一个 HTML 文件，内含若干 <section class="card">。
+   本文件提供：设计 token、卡片舞台、排版底子、主题、应用界面。
+   ============================================================= */
+
+/* ---------- 1. 设计 token ---------- */
+:root {
+  /* 字体：默认系统栈，避免导出时嵌入跨域 web 字体失败 */
+  --cm-font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --cm-font-serif: "Songti SC", "STSong", Georgia, "Times New Roman", serif;
+  --cm-font-mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* 主色（可被主题覆盖） */
+  --cm-bg: #ffffff;
+  --cm-fg: #1a1a1a;
+  --cm-muted: #8a8a8a;
+  --cm-accent: #4f46e5;
+  --cm-accent-fg: #ffffff;
+  --cm-line: rgba(0, 0, 0, 0.08);
+  --cm-card-bg: var(--cm-bg);
+
+  /* 字号阶梯（基于 1080px 宽卡片，base 30px） */
+  --cm-text: 30px;
+  --cm-text-sm: 24px;  /* footer/页码等次要 chrome，保持克制 */
+  --cm-kicker: 28px;   /* 眉题是内容，需在手机出图后清晰可读 */
+  --cm-h3: 34px;
+  --cm-h2: 46px;
+  --cm-h1: 66px;
+  --cm-display: 104px;
+
+  /* 间距 / 圆角 / 阴影 */
+  --cm-pad: 96px;
+  --cm-gap: 32px;
+  --cm-gap-lg: 56px;
+  --cm-radius: 28px;
+  --cm-radius-lg: 44px;
+  --cm-shadow: 0 24px 70px rgba(0, 0, 0, 0.18);
+  --cm-shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+/* ====== 各比例独立的字号 / 间距标准（不是一套硬套所有比例）======
+   字号主要随「画布宽度 + 观看距离 + 内容密度」定。:root 为默认值，
+   下面四个 preset 各自覆盖出适合自己的标准。 */
+
+/* 小红书 3:4（1080×1440）社交卡片：手机近距阅读，正文中等、标题醒目 */
+.cm-app[data-preset="xiaohongshu"] {
+  --cm-pad: 96px;
+  /* 小红书是 3:4 高卡：字号要大，内容才填得满、手机也看得清 */
+  --cm-text: 38px;  --cm-text-sm: 28px;  --cm-kicker: 32px;
+  --cm-h3: 46px;    --cm-h2: 60px;       --cm-h1: 84px;       --cm-display: 112px;
+}
+/* 小红书内容页：拉开元素间距，让内容铺开、不挤成一小团飘在中间 */
+.cm-app[data-preset="xiaohongshu"] .cm-fitbox:not(.cm-middle) { gap: 24px; }
+.cm-app[data-preset="xiaohongshu"] .cm-checklist { gap: 44px; }
+.cm-app[data-preset="xiaohongshu"] .card p { margin-bottom: 1.15em; }
+.cm-app[data-preset="xiaohongshu"] .cm-divider { margin: 40px 0; }
+/* 方形 1:1（1080×1080）：高度更紧，标题略收，留白优先 */
+.cm-app[data-preset="square"] {
+  --cm-pad: 88px;
+  --cm-text: 30px;  --cm-text-sm: 24px;  --cm-kicker: 27px;
+  --cm-h3: 34px;    --cm-h2: 44px;       --cm-h1: 60px;       --cm-display: 88px;
+}
+/* PPT 16:9（1280×720）演示稿：大屏远距观看，整体放大、正文要大、标题大气 */
+.cm-app[data-preset="ppt"] {
+  --cm-pad: 64px;
+  --cm-text: 34px;  --cm-text-sm: 28px;  --cm-kicker: 28px;
+  /* 标题不宜过大：720 高度有限，标题过大既占满高度又把正文衬得很小 */
+  --cm-h3: 40px;    --cm-h2: 52px;       --cm-h1: 72px;       --cm-display: 110px;
+}
+/* 竖屏 9:16（1080×1920）全屏海报：纵向空间充裕，标题可更大更有冲击力 */
+.cm-app[data-preset="story"] {
+  --cm-pad: 100px;
+  --cm-text: 32px;  --cm-text-sm: 26px;  --cm-kicker: 30px;
+  --cm-h3: 40px;    --cm-h2: 56px;       --cm-h1: 82px;       --cm-display: 132px;
+}
+
+/* ---------- 2. 应用界面骨架 ---------- */
+.cm-app {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0e0f13;
+  color: #e9e9ee;
+  font-family: var(--cm-font-sans);
+  overflow: hidden;
+}
+
+/* 暗色滚动条（应用界面 / 编辑器 / 弹窗 / 生成蒙版；不影响卡片内容本身） */
+.cm-app, .cm-app *, .cmai, .cmai *, .cmai-gen, .cmai-gen * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+.cm-app ::-webkit-scrollbar,
+.cmai ::-webkit-scrollbar,
+.cmai-gen ::-webkit-scrollbar,
+.cm-editor .CodeMirror-vscrollbar::-webkit-scrollbar,
+.cm-editor .CodeMirror-hscrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.cm-app ::-webkit-scrollbar-track,
+.cmai ::-webkit-scrollbar-track,
+.cmai-gen ::-webkit-scrollbar-track,
+.cm-editor .CodeMirror-vscrollbar::-webkit-scrollbar-track,
+.cm-editor .CodeMirror-hscrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cm-app ::-webkit-scrollbar-thumb,
+.cmai ::-webkit-scrollbar-thumb,
+.cmai-gen ::-webkit-scrollbar-thumb,
+.cm-editor .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
+.cm-editor .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.cm-app ::-webkit-scrollbar-thumb:hover,
+.cmai ::-webkit-scrollbar-thumb:hover,
+.cmai-gen ::-webkit-scrollbar-thumb:hover,
+.cm-editor .CodeMirror-vscrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
+  background-clip: content-box;
+}
+.cm-app ::-webkit-scrollbar-corner,
+.cmai ::-webkit-scrollbar-corner,
+.cmai-gen ::-webkit-scrollbar-corner { background: transparent; }
+
+.cm-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  z-index: 20;
+}
+.cm-toolbar .cm-brand {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cm-toolbar .cm-brand b { color: #fff; }
+.cm-toolbar .cm-brand span { color: var(--cm-muted); font-weight: 500; font-size: 13px; }
+/* 比例选择器：做成低调的可点 label，自带下拉小箭头 */
+.cm-toolbar .cm-brand .cm-preset {
+  appearance: none; -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--cm-muted);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  font: inherit; font-weight: 500; font-size: 13px;
+  padding: 3px 24px 3px 9px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath fill='%239aa0ad' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center;
+}
+.cm-toolbar .cm-brand .cm-preset:hover { color: #fff; border-color: rgba(255, 255, 255, 0.22); }
+.cm-toolbar .cm-brand .cm-preset:focus { outline: none; border-color: var(--cm-accent); }
+.cm-toolbar .cm-brand .cm-preset option { background: #16181d; color: #e9e9ee; }
+
+.cm-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e9e9ee;
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+  white-space: nowrap;
+}
+.cm-btn:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.24); }
+.cm-btn:active { transform: translateY(1px); }
+.cm-btn.cm-primary { background: var(--cm-accent); border-color: transparent; color: #fff; font-weight: 600; }
+.cm-btn.cm-primary:hover { filter: brightness(1.08); }
+.cm-btn[disabled] { opacity: 0.4; cursor: default; pointer-events: none; }
+.cm-select {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e9e9ee;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ---------- 3. 舞台 / 缩放 ---------- */
+.cm-stage {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+}
+.cm-scaler {
+  transform-origin: center center;
+  /* 不加 transition：缩放需精确跟随舞台尺寸（开关编辑器/改窗口时由 ResizeObserver 实时重算），
+     带过渡会让 scale 滞后于舞台、动画中途卡片错位（看起来"跑到展示区外/底部"）。 */
+  will-change: transform;
+}
+.cm-cards {
+  position: relative;
+  /* 尺寸由 preset 决定，见下 */
+}
+
+/* 卡片堆叠，仅显示 active。
+   用 !important 锁定定位：作者/LLM 常给卡片内联 position:relative（为内部绝对定位的装饰当包含块），
+   若不锁定，内联会压过这里的 absolute，使非活动卡仍留在文档流中、把后面的卡一张张往下顶
+   （表现为"第一页对、第二页起被顶到展示区下面"）。卡片自身无论 absolute/relative 都仍是其
+   绝对定位子元素的包含块，故强制覆盖不会破坏装饰。 */
+.cm-cards .card {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease;
+}
+.cm-cards .card.is-active { opacity: 1; visibility: visible; position: relative !important; }
+
+/* ---------- 4. 尺寸预设 ---------- */
+.cm-app[data-preset="xiaohongshu"] .cm-cards,
+.cm-app[data-preset="xiaohongshu"] .card { width: 1080px; height: 1440px; }
+.cm-app[data-preset="square"] .cm-cards,
+.cm-app[data-preset="square"] .card { width: 1080px; height: 1080px; }
+.cm-app[data-preset="ppt"] .cm-cards,
+.cm-app[data-preset="ppt"] .card { width: 1280px; height: 720px; }
+.cm-app[data-preset="story"] .cm-cards,
+.cm-app[data-preset="story"] .card { width: 1080px; height: 1920px; }
+
+/* ---------- 5. 卡片基础排版（让最简单的 HTML 也好看） ---------- */
+.card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: var(--cm-pad);
+  background: var(--cm-card-bg);
+  color: var(--cm-fg);
+  font-family: var(--cm-font-sans);
+  font-size: var(--cm-text);
+  line-height: 1.75;
+  letter-spacing: 0.02em; /* 中文正文略加字距更透气 */
+  overflow: hidden;
+  position: relative;
+  isolation: isolate; /* 为装饰层 z-index:-1 建立层叠上下文 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* 中文排版：标点挤压（压掉全角标点多余空白）+ 中西文自动间距，支持的浏览器自动生效 */
+  text-spacing-trim: normal;
+  text-autospace: normal;
+}
+.card * { box-sizing: border-box; }
+/* 装饰层用 z-index:-1 垫底（配合 .card 的 isolation），内容天然浮于其上，
+   不要再用「给所有子级设 position:relative」的写法——那会覆盖 fitbox 的 absolute。 */
+
+/* 内容层：运行时注入，绝对铺满卡片并复刻卡片的 flex 布局与内边距。
+   溢出时只缩放它（不动卡片盒/背景/导出尺寸），保证内容永不被裁切。
+   对齐类（cm-middle 等）由运行时从卡片复制到本层生效。 */
+.cm-fitbox {
+  position: absolute;
+  inset: 0;
+  z-index: 1; /* 高于装饰层(-1)，低于角标(2) */
+  display: flex;
+  flex-direction: column;
+  /* safe center：放得下时垂直居中（内容少不头重脚轻）；一旦超高，自动改为顶对齐而非两头都切，
+     保住标题/首行，只切最不重要的末尾——避免"标题被吃掉"的惨状。 */
+  justify-content: safe center;
+  padding: var(--cm-pad);
+  box-sizing: border-box;
+  overflow: hidden; /* 内容溢出时在内容区边界裁切，绝不漫到 footer/header 上 */
+  transform-origin: center center;
+}
+.cm-fitbox.cm-top { justify-content: flex-start; } /* 需要顶对齐时显式覆盖 */
+.card.cm-fitted { padding: 0; } /* 内边距交给 fitbox，避免双重 padding */
+/* 标题：平衡换行 + 中文按禁则换行（line-break:strict）。
+   注意：中文标题不能用 word-break:keep-all——中文无空格会被当成一个整词而完全不换行、溢出被裁。 */
+.card h1, .card h2, .card h3, .cm-display, .cm-quote-text {
+  text-wrap: balance; word-break: normal; overflow-wrap: anywhere; line-break: strict;
+}
+/* 中文标题：行高放宽到方块字舒适区间，字距用 0（绝不用负值，否则中文发挤） */
+.card h1 { font-size: var(--cm-h1); line-height: 1.34; font-weight: 800; margin: 0 0 0.4em; letter-spacing: 0; }
+.card h2 { font-size: var(--cm-h2); line-height: 1.38; font-weight: 700; margin: 0 0 0.5em; letter-spacing: 0; }
+.card h3 { font-size: var(--cm-h3); line-height: 1.45; font-weight: 700; margin: 0 0 0.5em; letter-spacing: 0; }
+.card p { margin: 0 0 0.9em; }
+.card p:last-child { margin-bottom: 0; }
+.card strong { color: var(--cm-accent); font-weight: 700; }
+.card a { color: var(--cm-accent); text-decoration: none; }
+.card ul, .card ol { margin: 0 0 1em; padding-left: 1.3em; }
+.card li { margin: 0 0 0.5em; }
+.card img { max-width: 100%; border-radius: var(--cm-radius); display: block; }
+.card hr { border: none; border-top: 2px solid var(--cm-line); margin: 1em 0; }
+.card blockquote {
+  margin: 0 0 1em;
+  padding-left: 0.8em;
+  border-left: 6px solid var(--cm-accent);
+  color: var(--cm-fg);
+}
+
+/* ---------- 6. 实用类（给 LLM 与作者的拼装件） ---------- */
+.cm-center { justify-content: center; align-items: flex-start; }
+.cm-middle { justify-content: safe center; } /* 同 fitbox：超高时顶对齐而非两头切 */
+.cm-fill { flex: 1; min-height: 0; }
+.cm-row { display: flex; gap: var(--cm-gap); }
+.cm-col { display: flex; flex-direction: column; gap: var(--cm-gap); }
+.cm-between { justify-content: space-between; }
+.cm-items-center { align-items: center; }
+.cm-text-center { text-align: center; }
+.cm-muted { color: var(--cm-muted); }
+.cm-accent { color: var(--cm-accent); }
+.cm-sm { font-size: var(--cm-text-sm); }
+
+.cm-kicker {
+  font-size: var(--cm-kicker);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--cm-accent);
+  margin-bottom: 0.6em;
+}
+.cm-display { font-size: var(--cm-display); line-height: 1.18; font-weight: 900; letter-spacing: 0; margin: 0; }
+.cm-lead { font-size: 38px; line-height: 1.5; color: var(--cm-muted); }
+
+.cm-tag {
+  display: inline-block;
+  font-size: var(--cm-text-sm);
+  font-weight: 600;
+  padding: 8px 20px;
+  border-radius: 999px;
+  background: var(--cm-accent);
+  color: var(--cm-accent-fg);
+}
+.cm-tag.cm-ghost { background: transparent; border: 2px solid var(--cm-accent); color: var(--cm-accent); }
+.cm-num { font-size: 120px; font-weight: 900; line-height: 1.3; color: var(--cm-accent); letter-spacing: -2px; }
+
+/* footer / header 是固定的结构性 chrome：绝对定位、尺寸位置恒定，
+   运行时把它们留在卡片上、不放进 fitbox，因此不受 auto-fit 缩放影响，每页一致。 */
+.cm-footer {
+  position: absolute;
+  left: var(--cm-pad);
+  right: var(--cm-pad);
+  bottom: var(--cm-pad);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cm-gap);
+  padding-top: var(--cm-gap);
+  font-size: var(--cm-text-sm);
+  color: var(--cm-muted);
+  border-top: 1px solid var(--cm-line);
+}
+.cm-header {
+  position: absolute;
+  left: var(--cm-pad);
+  right: var(--cm-pad);
+  top: var(--cm-pad);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cm-gap);
+  font-size: var(--cm-text-sm);
+  color: var(--cm-muted);
+}
+/* PPT 演示稿：页脚做小做轻（运行信息，不抢正文）；页眉做成左对齐标题栏 */
+.cm-app[data-preset="ppt"] .cm-footer {
+  bottom: 24px;             /* 更靠底边 */
+  font-size: 14px;         /* 角注级小字 */
+  padding-top: 12px;
+  border-top-color: var(--cm-line);
+}
+.cm-app[data-preset="ppt"] .cm-header {
+  top: 40px;
+  font-size: 46px;          /* 页眉即本页标题：醒目、左对齐、全程同位置 */
+  font-weight: 800;
+  color: var(--cm-fg);
+  padding-bottom: 18px;
+  border-bottom: 2px solid var(--cm-line);
+}
+.cm-app[data-preset="ppt"] .cm-header .cm-sm,
+.cm-app[data-preset="ppt"] .cm-header small { font-size: 22px; font-weight: 600; color: var(--cm-muted); }
+.cm-divider { height: 1px; background: var(--cm-line); margin: var(--cm-gap) 0; }
+
+/* 卡内角标页码（放映时由运行时填充） */
+.cm-page {
+  position: absolute;
+  right: var(--cm-pad);
+  bottom: calc(var(--cm-pad) - 28px);
+  z-index: 2; /* 浮于 fitbox 之上，保持可见 */
+  font-size: var(--cm-text-sm);
+  color: var(--cm-muted);
+}
+
+/* ---------- 7. 主题 ---------- */
+.card[data-theme="dark"] {
+  --cm-card-bg: #16181d;
+  --cm-fg: #f2f3f7;
+  --cm-muted: #9aa0ad;
+  --cm-accent: #8b5cf6;
+  --cm-line: rgba(255, 255, 255, 0.1);
+}
+.card[data-theme="warm"] {
+  --cm-card-bg: #faf4ea;
+  --cm-fg: #2b2118;
+  --cm-muted: #9b8a72;
+  --cm-accent: #c2410c;
+  --cm-line: rgba(120, 80, 40, 0.14);
+}
+.card[data-theme="ink"] {
+  --cm-card-bg: #f7f5f0;
+  --cm-fg: #1f1f1f;
+  --cm-muted: #7a766c;
+  --cm-accent: #b91c1c;
+  --cm-line: rgba(0, 0, 0, 0.12);
+  font-family: var(--cm-font-serif);
+}
+.card[data-theme="ink"] h1, .card[data-theme="ink"] h2, .card[data-theme="ink"] h3 { font-family: var(--cm-font-serif); }
+.card[data-theme="mint"] {
+  --cm-card-bg: #0f1f1c;
+  --cm-fg: #eafff7;
+  --cm-muted: #aed6c9;
+  --cm-accent: #34d399;
+  --cm-accent-fg: #06241d;
+  --cm-line: rgba(255, 255, 255, 0.1);
+}
+.card[data-theme="gradient"] {
+  --cm-fg: #ffffff;
+  --cm-muted: rgba(255, 255, 255, 0.88);
+  --cm-accent: #ffe14d;
+  --cm-accent-fg: #2b1a00;
+  --cm-line: rgba(255, 255, 255, 0.25);
+  background: linear-gradient(135deg, #6d28d9 0%, #db2777 55%, #f97316 100%);
+}
+.card[data-theme="gradient"] strong { color: var(--cm-accent); }
+.card[data-theme="ocean"] {
+  --cm-fg: #ffffff;
+  --cm-muted: rgba(255, 255, 255, 0.86);
+  --cm-accent: #7dd3fc;
+  --cm-accent-fg: #06243d;
+  --cm-line: rgba(255, 255, 255, 0.24);
+  background: linear-gradient(160deg, #0f172a 0%, #1e3a8a 58%, #1d6ba6 100%);
+}
+/* 更多有性格的主题（配色 / 字体 / 气质各不相同） */
+.card[data-theme="sky"] {
+  --cm-fg: #0c2535; --cm-muted: #4a6b80; --cm-accent: #0284c7; --cm-line: rgba(2, 132, 199, 0.16);
+  background: linear-gradient(170deg, #e0f2fe 0%, #f0f9ff 60%, #ffffff 100%);
+}
+.card[data-theme="sunset"] {
+  --cm-fg: #ffffff; --cm-muted: rgba(255,255,255,.9); --cm-accent: #fff27a; --cm-accent-fg: #5c1d00; --cm-line: rgba(255,255,255,.3);
+  background: linear-gradient(150deg, #e11d48 0%, #f97316 55%, #f59e0b 100%);
+}
+.card[data-theme="forest"] {
+  --cm-fg: #f0fdf4; --cm-muted: #c8e3cf; --cm-accent: #fcd34d; --cm-accent-fg: #173e12; --cm-line: rgba(255,255,255,.14);
+  background: linear-gradient(165deg, #064e3b 0%, #065f46 60%, #047857 100%);
+}
+.card[data-theme="paper"] {
+  --cm-card-bg: #fbf8f1; --cm-fg: #2a2620; --cm-muted: #8a8174; --cm-accent: #9a3412; --cm-line: rgba(60,50,40,.15);
+  font-family: var(--cm-font-serif);
+}
+.card[data-theme="paper"] h1, .card[data-theme="paper"] h2, .card[data-theme="paper"] h3 { font-family: var(--cm-font-serif); }
+.card[data-theme="bold"] {
+  --cm-card-bg: #faf500; --cm-fg: #0a0a0a; --cm-muted: #444; --cm-accent: #0a0a0a; --cm-line: rgba(0,0,0,.85);
+  --cm-radius: 0px; --cm-radius-lg: 0px;
+}
+.card[data-theme="bold"] h1, .card[data-theme="bold"] h2 { font-weight: 900; letter-spacing: 0; }
+.card[data-theme="bold"] strong { background: #0a0a0a; color: #faf500; padding: 0 .15em; }
+.card[data-theme="pastel"] {
+  --cm-card-bg: #fdf2f8; --cm-fg: #3b2a3a; --cm-muted: #97798f; --cm-accent: #db2777; --cm-line: rgba(190,120,170,.2);
+  --cm-radius: 40px;
+}
+.card[data-theme="tech"] {
+  --cm-card-bg: #0a0e1a; --cm-fg: #e2e8f0; --cm-muted: #97a6bd; --cm-accent: #22d3ee; --cm-accent-fg: #03212c; --cm-line: rgba(34,211,238,.18);
+}
+.card[data-theme="tech"] .cm-kicker, .card[data-theme="tech"] .cm-footer { font-family: var(--cm-font-mono); }
+.card[data-theme="cream"] {
+  --cm-card-bg: #f5f1e8; --cm-fg: #33302a; --cm-muted: #94917f; --cm-accent: #1c6e54; --cm-line: rgba(50,45,35,.12);
+}
+.card[data-theme="night"] {
+  --cm-card-bg: #0d0d12; --cm-fg: #f4f4f6; --cm-muted: #8a8a99; --cm-accent: #f472b6; --cm-line: rgba(255,255,255,.1);
+}
+
+/* ===================================================================
+   扩展设计系统：装饰层 / 版式原型（给 LLM 更大发挥空间，且不破坏排版）
+   =================================================================== */
+
+/* --- 装饰层：始终在内容之下（z-index:-1），不挡文字，不响应交互 --- */
+.cm-deco {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+.cm-deco-glow::before {
+  content: ""; position: absolute; width: 90%; height: 60%;
+  top: -15%; right: -20%; border-radius: 50%;
+  background: radial-gradient(circle, var(--cm-accent) 0%, transparent 70%);
+  opacity: 0.28; filter: blur(8px);
+}
+.cm-deco-blob::before, .cm-deco-blob::after {
+  content: ""; position: absolute; border-radius: 50%;
+  background: var(--cm-accent); opacity: 0.14; filter: blur(4px);
+}
+.cm-deco-blob::before { width: 460px; height: 460px; top: -160px; left: -120px; }
+.cm-deco-blob::after { width: 320px; height: 320px; bottom: -120px; right: -80px; opacity: 0.1; }
+.cm-deco-grid {
+  background-image: linear-gradient(var(--cm-line) 1px, transparent 1px),
+                    linear-gradient(90deg, var(--cm-line) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+.cm-deco-dots {
+  background-image: radial-gradient(var(--cm-line) 2.5px, transparent 2.5px);
+  background-size: 44px 44px;
+}
+.cm-deco-ring::before {
+  content: ""; position: absolute; width: 520px; height: 520px; border-radius: 50%;
+  border: 2px solid var(--cm-line); top: -180px; right: -160px;
+}
+
+/* 超大水印序号（内容页角落，低透明度装饰） */
+.cm-watermark {
+  position: absolute; z-index: -1; right: 40px; bottom: -40px;
+  font-size: 460px; font-weight: 900; line-height: 1;
+  color: var(--cm-accent); opacity: 0.08; letter-spacing: -10px; user-select: none;
+}
+
+/* --- 版式原型 --- */
+/* 分栏：左右 / 上下结构 */
+.cm-split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--cm-gap-lg); align-items: center; flex: 1; min-height: 0; }
+.cm-split.cm-split-13 { grid-template-columns: 1fr 1.6fr; }
+.cm-split.cm-split-31 { grid-template-columns: 1.6fr 1fr; }
+
+/* 网格：特性 / 要点矩阵 */
+.cm-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--cm-gap); }
+.cm-grid.cm-grid-3 { grid-template-columns: repeat(3, 1fr); }
+
+/* 卡块：带背景的内容盒 */
+.cm-cell {
+  background: var(--cm-line); /* 不支持 color-mix 时的回退 */
+  background: color-mix(in srgb, var(--cm-fg) 4%, transparent); /* 极淡底色，更克制 */
+  border: 1px solid var(--cm-line); /* 细边框给出清晰边界，不靠厚实平涂 */
+  border-radius: 16px; /* 收圆角，不那么"泡泡" */
+  padding: 32px 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center; /* 卡块被撑高时内容垂直居中；内容反超卡块时顶对齐，保住标题不被切 */
+  gap: 14px;
+}
+.cm-cell.cm-outline { background: transparent; }
+/* 卡块内的大字母/序号收小收轻（96px 太"傻大"）；标题与说明拉开层级 */
+.cm-cell .cm-stat-num { font-size: 60px; font-weight: 800; letter-spacing: 0; line-height: 1.3; margin-bottom: 4px; }
+.cm-cell h3 { margin: 0; }
+.cm-cell p { margin: 0; color: var(--cm-muted); font-size: 0.9em; line-height: 1.55; } /* 说明略小、弱化，但不至于看不清 */
+
+/* 数据/指标 */
+.cm-stat { display: flex; flex-direction: column; gap: 6px; }
+.cm-stat-num { font-size: 96px; font-weight: 900; line-height: 1.3; color: var(--cm-accent); letter-spacing: -2px; }
+.cm-stat-label { font-size: var(--cm-text-sm); color: var(--cm-muted); }
+
+/* 大引言 */
+.cm-quote-mark { font-size: 220px; line-height: 0.7; color: var(--cm-accent); opacity: 0.35; font-family: Georgia, serif; height: 0.52em; margin-bottom: 0.1em; }
+.cm-quote-text { font-size: 1.75em; line-height: 1.5; font-weight: 700; } /* 金句是主角，随比例放大 */
+
+/* 强调条 / chip / 圆点项目符 */
+.cm-bar { width: 88px; height: 8px; border-radius: 999px; background: var(--cm-accent); margin-bottom: var(--cm-gap); }
+.cm-chip { display: inline-flex; align-items: center; gap: 8px; font-size: var(--cm-text-sm); font-weight: 600; padding: 8px 18px; border-radius: 999px; border: 2px solid var(--cm-line); }
+.cm-checklist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 28px; }
+/* 悬挂缩进：圆点绝对定位，正文按段落自然换行——兼容「<strong>小标题</strong>：说明」这类富列表项，
+   不会再被 flex 压缩成单字竖排。 */
+.cm-checklist li { position: relative; padding-left: 34px; }
+.cm-checklist li::before {
+  content: ""; position: absolute; left: 0; top: 0.72em;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--cm-accent); transform: translateY(-50%);
+}
+
+/* 间距微调实用类 */
+.cm-mt { margin-top: var(--cm-gap); } .cm-mt-lg { margin-top: var(--cm-gap-lg); }
+.cm-mb { margin-bottom: var(--cm-gap); } .cm-gap-lg { gap: var(--cm-gap-lg); }
+
+/* --- 溢出警告：仅编辑态可见，提醒内容超出了卡片（导出时不显示） --- */
+.cm-app.is-editing .card[data-overflow] { outline: 3px dashed #f87171; outline-offset: -3px; }
+.cm-app.is-editing .card[data-overflow]::after {
+  content: "⚠ 内容偏多，已自动缩小，建议精简";
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  z-index: 5; background: #f87171; color: #fff; font-size: 22px; font-weight: 600;
+  padding: 8px 22px; border-radius: 999px; white-space: nowrap; font-family: var(--cm-font-sans);
+}
+.cm-exporting .card[data-overflow] { outline: none; }
+
+/* ---------- 8. 导航 / 缩略图 ---------- */
+.cm-nav {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  z-index: 20;
+}
+.cm-nav .cm-counter { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--cm-muted); min-width: 56px; text-align: center; }
+.cm-dots { display: flex; gap: 7px; align-items: center; }
+.cm-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22); cursor: pointer; border: none; padding: 0;
+  transition: background 0.15s, transform 0.15s;
+}
+.cm-dot.is-active { background: #fff; transform: scale(1.3); }
+
+/* ---------- 9. 放映（全屏）模式 ---------- */
+.cm-app.is-present .cm-toolbar,
+.cm-app.is-present .cm-nav { opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+.cm-app.is-present .cm-stage { background: #000; }
+.cm-app.is-present:hover .cm-nav { opacity: 1; pointer-events: auto; }
+
+/* 导出时临时隐藏运行时角标 */
+.cm-exporting .cm-page { display: none; }
+
+/* ---------- 10. 应用内确认弹窗 ---------- */
+.cm-confirm-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+}
+.cm-confirm {
+  width: min(380px, 90vw);
+  background: #16181d;
+  color: #e9e9ee;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.5);
+  padding: 24px;
+  font-family: var(--cm-font-sans);
+}
+.cm-confirm p { margin: 0 0 22px; font-size: 15px; line-height: 1.6; }
+.cm-confirm-btns { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ---------- 11. 提示 toast ---------- */
+.cm-toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(20, 20, 24, 0.95);
+  color: #fff;
+  padding: 12px 22px;
+  border-radius: 12px;
+  font-size: 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 100;
+}
+.cm-toast.is-show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- 11. 编辑器（仅 index 工具页用） ---------- */
+.cm-editor {
+  flex: none;
+  width: 0;
+  overflow: hidden;
+  transition: width 0.2s ease;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0a0b0e;
+}
+.cm-app.is-editing .cm-editor { width: 42%; max-width: 720px; }
+.cm-app.is-editing .cm-body { display: flex; }
+.cm-body { flex: 1; display: flex; min-height: 0; }
+.cm-editor textarea {
+  width: 100%;
+  height: 100%;
+  border: none;
+  resize: none;
+  background: #0a0b0e;
+  color: #d4d4d8;
+  font-family: var(--cm-font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 18px;
+  outline: none;
+  tab-size: 2;
+}
+
+/* CodeMirror（加载成功后接管编辑器，撑满面板） */
+.cm-editor .CodeMirror {
+  height: 100%;
+  font-family: var(--cm-font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 隔离：CodeMirror 的高亮 token 也用 cm- 前缀（如 .cm-tag），
+   会与本框架的实用类撞名。这里以更高优先级中和框架样式对 token 的污染，
+   但不设 color（高亮颜色由 CodeMirror 主题以更高优先级提供，保持不变）。 */
+.cm-editor .CodeMirror span[class*="cm-"] {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}

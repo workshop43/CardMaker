@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3 个写作习惯</title>
+  <link rel="stylesheet" href="../cardmaker.css" />
+</head>
+<body>
+  <!-- 一个 deck = 这一段。整套用同一主题 ocean，data-font 指定全局字体（这里用思源宋体，文学感）。 -->
+  <div data-cardmaker data-preset="xiaohongshu" data-title="3个写作习惯" data-font="song">
+
+    <!-- 封面：垂直居中 + 光晕装饰 -->
+    <section class="card cm-middle" data-theme="ocean">
+      <div class="cm-deco cm-deco-glow"></div>
+      <div class="cm-kicker">每日精进 · 写作</div>
+      <h1 class="cm-display">坚持<br />3 个写作习惯</h1>
+      <p class="cm-lead cm-mt">把表达变成肌肉记忆，从此不再害怕动笔。</p>
+      <div class="cm-footer"><span>@CardMaker</span><span>← 滑动 →</span></div>
+    </section>
+
+    <!-- 大序号内容页 + 水印序号 -->
+    <section class="card" data-theme="ocean">
+      <div class="cm-watermark">1</div>
+      <div class="cm-row cm-items-center" style="gap: 32px;">
+        <div class="cm-num">01</div>
+        <h2 style="margin: 0;">先写烂，<br />再改好</h2>
+      </div>
+      <div class="cm-divider"></div>
+      <p>初稿的唯一任务是<strong>存在</strong>。允许自己写得糟糕，你才会真正开始动笔。</p>
+      <p class="cm-muted">完美主义是写作最大的敌人。</p>
+      <div class="cm-footer"><span>@CardMaker</span><span>写作习惯</span></div>
+    </section>
+
+    <!-- 数据 / 网格页 -->
+    <section class="card" data-theme="ocean">
+      <div class="cm-deco cm-deco-dots"></div>
+      <div class="cm-bar"></div>
+      <h2>固定时间，固定地点</h2>
+      <div class="cm-grid cm-mt">
+        <div class="cm-cell">
+          <div class="cm-stat"><div class="cm-stat-num">9:00</div><div class="cm-stat-label">每天同一时刻动笔</div></div>
+        </div>
+        <div class="cm-cell">
+          <div class="cm-stat"><div class="cm-stat-num">21天</div><div class="cm-stat-label">习惯成型的周期</div></div>
+        </div>
+      </div>
+      <p class="cm-muted cm-mt">不靠灵感，靠<strong>系统</strong>。</p>
+      <div class="cm-footer"><span>@CardMaker</span><span>写作习惯</span></div>
+    </section>
+
+    <!-- 清单页 -->
+    <section class="card" data-theme="ocean">
+      <div class="cm-watermark">3</div>
+      <div class="cm-kicker">第三个习惯</div>
+      <h2>读给别人听</h2>
+      <ul class="cm-checklist cm-mt">
+        <li>读到卡顿 → 句子太长</li>
+        <li>读到无聊 → 信息太少</li>
+        <li>读到别扭 → 用词不对</li>
+      </ul>
+      <div class="cm-footer"><span>@CardMaker</span><span>写作习惯</span></div>
+    </section>
+
+    <!-- 金句页：大引言 + 强调线 + 出处，构图完整 -->
+    <section class="card cm-middle" data-theme="ocean">
+      <div class="cm-deco cm-deco-glow"></div>
+      <div class="cm-quote-mark">"</div>
+      <div class="cm-quote-text">写作不是天赋，<br />而是一门可以<br />练出来的手艺。</div>
+      <div class="cm-bar cm-mt-lg"></div>
+      <p class="cm-muted">每日精进 · 写作</p>
+      <div class="cm-footer"><span>@CardMaker</span><span>写作习惯</span></div>
+    </section>
+
+    <!-- 结尾页：行动召唤 -->
+    <section class="card cm-middle cm-text-center" data-theme="ocean">
+      <div class="cm-deco cm-deco-glow"></div>
+      <h1>今天就开始</h1>
+      <p class="cm-lead cm-mt">挑一个习惯，坚持 7 天。</p>
+      <div class="cm-mt-lg"><span class="cm-tag">收藏 + 点赞 不迷路</span></div>
+      <div class="cm-footer"><span>@CardMaker</span><span>关注看更多</span></div>
+    </section>
+
+  </div>
+  <script src="../cardmaker.js"></script>
+  <script src="../cardmaker.config.js"></script>
+  <script src="../cardmaker-ai.js"></script>
+</body>
+</html>

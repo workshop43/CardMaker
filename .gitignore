@@ -1,0 +1,19 @@
+# 系统
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 导出产物
+*.png
+*.zip
+!examples/**/*.png
+
+# 依赖（本项目零依赖，保留以防误传）
+node_modules/
+
+# Claude Code 本地工具配置（预览/启动等，按机器而异）
+.claude/

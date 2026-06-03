@@ -1,0 +1,14 @@
+{
+  "name": "cardmaker",
+  "version": "0.1.0",
+  "description": "用 HTML 设计卡片，像 PPT 一样放映，一键导出高清图片。纯静态、零构建、LLM 友好。",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes serve -l 8765 .",
+    "start": "npx --yes serve -l 8765 .",
+    "preview": "npx --yes serve -l 8765 ."
+  },
+  "keywords": ["card", "poster", "slides", "html-to-image", "xiaohongshu", "ppt", "llm", "ai"]
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CardMaker — 用 HTML 设计、放映、出图</title>
+  <meta name="description" content="纯静态、零构建的卡片设计运行时。用 HTML/CSS 做有设计感的卡片，像 PPT 一样放映，一键导出高清图片。LLM 友好。" />
+  <link rel="stylesheet" href="cardmaker.css" />
+</head>
+<body>
+  <!-- 主页本身就是一个 CardMaker deck（吃自己的狗粮）。点「编辑」即可改写。 -->
+  <div data-cardmaker data-preset="xiaohongshu" data-title="CardMaker">
+
+    <section class="card cm-middle" data-theme="gradient">
+      <div class="cm-kicker">Open Source · 零构建</div>
+      <h1 class="cm-display">Card<br />Maker</h1>
+      <p class="cm-lead" style="margin-top: 24px;">用 HTML 设计卡片，<br />像 PPT 一样放映，<br />一键导出高清图片。</p>
+      <div class="cm-footer"><span>点「编辑」试试 →</span><span>← 翻页 →</span></div>
+    </section>
+
+    <section class="card" data-theme="dark">
+      <div class="cm-kicker">它是什么</div>
+      <h2>一块尺寸精确、<br />排版够好看的画布</h2>
+      <p>每个 <strong>&lt;section class="card"&gt;</strong> 就是一页。HTML/CSS 完全自由，想怎么设计就怎么设计。</p>
+      <ul>
+        <li>固定比例画布（小红书 / 方形 / PPT / 竖屏）</li>
+        <li>原生像素渲染，导出 <strong>2x 高清 PNG</strong></li>
+        <li>纯静态，clone 即用，可挂 GitHub Pages</li>
+      </ul>
+      <div class="cm-footer"><span>@CardMaker</span><span>About</span></div>
+    </section>
+
+    <section class="card" data-theme="warm">
+      <div class="cm-kicker">怎么用</div>
+      <h2>三步</h2>
+      <div class="cm-col" style="gap: 32px; margin-top: 12px;">
+        <div class="cm-row cm-items-center" style="gap: 28px;">
+          <div class="cm-num" style="font-size: 72px;">1</div>
+          <p style="margin: 0;">写若干 <strong>.card</strong>，或让 LLM 照 <strong>PROMPT.md</strong> 生成</p>
+        </div>
+        <div class="cm-row cm-items-center" style="gap: 28px;">
+          <div class="cm-num" style="font-size: 72px;">2</div>
+          <p style="margin: 0;">浏览器打开，左右翻页 / 按 <strong>F</strong> 全屏放映</p>
+        </div>
+        <div class="cm-row cm-items-center" style="gap: 28px;">
+          <div class="cm-num" style="font-size: 72px;">3</div>
+          <p style="margin: 0;">点 <strong>导出全部</strong>，打包下载所有卡片图</p>
+        </div>
+      </div>
+      <div class="cm-footer"><span>@CardMaker</span><span>How</span></div>
+    </section>
+
+    <section class="card cm-middle" data-theme="mint">
+      <div class="cm-kicker">为 AI 而生</div>
+      <h2>把 PROMPT.md 喂给 LLM，<br />让它直接产出 deck</h2>
+      <p class="cm-lead" style="margin-top: 20px;">脚手架给 LLM 一块约束清晰的画布，<br />它负责创意，运行时负责放映与出图。</p>
+      <div style="margin-top: 36px;"><span class="cm-tag">点「编辑」改这一页试试</span></div>
+      <div class="cm-footer"><span>github.com/yourname/cardmaker</span></div>
+    </section>
+
+  </div>
+  <script src="cardmaker.js"></script>
+  <script src="cardmaker.config.js"></script>
+  <script src="cardmaker-ai.js"></script>
+</body>
+</html>
