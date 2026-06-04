@@ -122,9 +122,16 @@ function parseJson(res) {
 }
 
 // ---------- HTML 提取小工具 ----------
+// 剥掉推理模型可能内联在正文里的思考块（<think>…</think> / <thinking>…</thinking>），
+// 避免其内容混进卡片/样式。callModel 已把 reasoning_content 单独分流，这里是对「思考混进
+// content」的二次保险。
+function stripThink(text) {
+  return String(text).replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, "");
+}
+
 // 从模型输出里提取干净的卡片 HTML（剥代码围栏，截取 <style>/<section> 到最后一个 </section>）
 export function extractCards(text) {
-  let s = text.trim();
+  let s = stripThink(text).trim();
   s = s.replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/i, "").trim();
   const sec = s.indexOf("<section");
   const sty = s.indexOf("<style");
@@ -142,14 +149,14 @@ export function countCards(html) {
 
 // 抽出单个 <section>…</section>（render 阶段每页只回一张卡）
 export function extractSection(text) {
-  const s = text.replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/i, "");
+  const s = stripThink(text).replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/i, "");
   const m = s.match(/<section[\s\S]*<\/section>/i);
   return m ? m[0] : "";
 }
 
 // 抽出一个 <style>…</style>（design 阶段的全局设计系统）
 export function extractStyle(text) {
-  const s = text.replace(/^```(?:css|html)?\s*/i, "").replace(/```\s*$/i, "");
+  const s = stripThink(text).replace(/^```(?:css|html)?\s*/i, "").replace(/```\s*$/i, "");
   const m = s.match(/<style[\s\S]*<\/style>/i);
   return m ? m[0] : "";
 }

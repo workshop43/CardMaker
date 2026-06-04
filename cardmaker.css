@@ -47,9 +47,9 @@
 /* 小红书 3:4（1080×1440）社交卡片：手机近距阅读，正文中等、标题醒目 */
 .cm-app[data-preset="xiaohongshu"] {
   --cm-pad: 96px;
-  /* 小红书是 3:4 高卡：字号要大，内容才填得满、手机也看得清 */
-  --cm-text: 38px;  --cm-text-sm: 28px;  --cm-kicker: 32px;
-  --cm-h3: 46px;    --cm-h2: 60px;       --cm-h1: 84px;       --cm-display: 112px;
+  /* 小红书是 3:4 高卡：字号要大，内容才填得满、手机也看得清（标题别过大喧宾夺主） */
+  --cm-text: 32px;  --cm-text-sm: 22px;  --cm-kicker: 26px;
+  --cm-h3: 42px;    --cm-h2: 52px;       --cm-h1: 68px;       --cm-display: 88px;
 }
 /* 小红书内容页：拉开元素间距，让内容铺开、不挤成一小团飘在中间 */
 .cm-app[data-preset="xiaohongshu"] .card:not(.cm-middle) { gap: 24px; }
@@ -59,21 +59,21 @@
 /* 方形 1:1（1080×1080）：高度更紧，标题略收，留白优先 */
 .cm-app[data-preset="square"] {
   --cm-pad: 88px;
-  --cm-text: 30px;  --cm-text-sm: 24px;  --cm-kicker: 27px;
-  --cm-h3: 34px;    --cm-h2: 44px;       --cm-h1: 60px;       --cm-display: 88px;
+  --cm-text: 26px;  --cm-text-sm: 20px;  --cm-kicker: 22px;
+  --cm-h3: 32px;    --cm-h2: 40px;       --cm-h1: 52px;       --cm-display: 72px;
 }
 /* PPT 16:9（1280×720）演示稿：大屏远距观看，整体放大、正文要大、标题大气 */
 .cm-app[data-preset="ppt"] {
   --cm-pad: 64px;
-  --cm-text: 34px;  --cm-text-sm: 28px;  --cm-kicker: 28px;
+  --cm-text: 30px;  --cm-text-sm: 22px;  --cm-kicker: 23px;
   /* 标题不宜过大：720 高度有限，标题过大既占满高度又把正文衬得很小 */
-  --cm-h3: 40px;    --cm-h2: 52px;       --cm-h1: 72px;       --cm-display: 110px;
+  --cm-h3: 38px;    --cm-h2: 48px;       --cm-h1: 62px;       --cm-display: 90px;
 }
 /* 竖屏 9:16（1080×1920）全屏海报：纵向空间充裕，标题可更大更有冲击力 */
 .cm-app[data-preset="story"] {
   --cm-pad: 100px;
-  --cm-text: 32px;  --cm-text-sm: 26px;  --cm-kicker: 30px;
-  --cm-h3: 40px;    --cm-h2: 56px;       --cm-h1: 82px;       --cm-display: 132px;
+  --cm-text: 28px;  --cm-text-sm: 21px;  --cm-kicker: 24px;
+  --cm-h3: 38px;    --cm-h2: 50px;       --cm-h1: 68px;       --cm-display: 104px;
 }
 
 /* ---------- 2. 应用界面骨架 ---------- */
@@ -376,6 +376,14 @@
 .cm-app[data-preset="ppt"] .cm-header .cm-sm,
 .cm-app[data-preset="ppt"] .cm-header small { font-size: 22px; font-weight: 600; color: var(--cm-muted); }
 .cm-divider { height: 1px; background: var(--cm-line); margin: var(--cm-gap) 0; }
+
+/* 标题区：主标题 + 副标题是一个【常规流分组】。副标题永远排在主标题之下，
+   主标题折成几行会自然把副标题顶下去——绝不重叠。
+   需要整组定位（按 data-role 摆位置）时【只定位 .cm-titlebar 容器】，组内保持常规流；
+   切勿给 .cm-title / .cm-subtitle 单独绝对定位（那正是重叠的根源）。 */
+.cm-titlebar { display: flex; flex-direction: column; }
+.cm-title { font-size: var(--cm-h1); line-height: 1.34; font-weight: 800; margin: 0; }
+.cm-subtitle { font-size: var(--cm-h3); line-height: 1.45; color: var(--cm-muted); margin: 0.5em 0 0; }
 
 /* 卡内角标页码（放映时由运行时填充） */
 .cm-page {

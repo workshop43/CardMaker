@@ -13,6 +13,7 @@
    也可手动初始化：const app = new CardMaker({ root, preset });
    ============================================================= */
 "use strict";
+import { runChecks } from "./checks.js";
 const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 IIFE 包裹
 
   var PRESETS = {
@@ -95,6 +96,61 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     if (cls) e.className = cls;
     if (html != null) e.innerHTML = html;
     return e;
+  }
+
+  // ---------- deck <style> 作用域隔离 ----------
+  // 作者/LLM 写的 deck 级 <style> 是全局注入的：一旦出现 body{}、*{}、button{}、h1{}、.card{}
+  // 这类选择器，就会泄漏出卡片、污染平台 UI（工具栏/导航等）。这里把每条规则限定到 .cm-cards
+  // 容器内：:root/html/body 映射到作用域根 .cm-cards（既承载令牌覆盖——比 .cm-app[data-preset]
+  // 默认字阶离卡片更近故真正生效，也承载页面级背景），其余选择器加 .cm-cards 前缀；
+  // @media/@supports/@container/@layer 递归处理；@keyframes/@font-face/@page 等不动。幂等。
+  var CARD_SCOPE = ".cm-cards";
+  function _readBlock(css, open) { // css[open]==='{'；返回 {inner,end}
+    var depth = 0, i = open, n = css.length;
+    for (; i < n; i++) { var c = css[i]; if (c === "{") depth++; else if (c === "}" && --depth === 0) { i++; break; } }
+    return { inner: css.slice(open + 1, i - 1), end: i };
+  }
+  function _splitTop(sel) { // 顶层逗号拆分选择器列表，跳过 () []
+    var parts = [], buf = "", p = 0, b = 0;
+    for (var i = 0; i < sel.length; i++) { var c = sel[i];
+      if (c === "(") p++; else if (c === ")") p--; else if (c === "[") b++; else if (c === "]") b--;
+      if (c === "," && !p && !b) { parts.push(buf); buf = ""; } else buf += c; }
+    parts.push(buf); return parts;
+  }
+  function _scopeSel(sel, scope) {
+    return _splitTop(sel).map(function (s) { var t = s.trim();
+      if (!t) return t;
+      if (/^(:root|html|body)$/i.test(t)) return scope;
+      if (t === scope || t.indexOf(scope + " ") === 0) return t; // 已限定，幂等
+      return scope + " " + t;
+    }).join(", ");
+  }
+  function _scopeBlock(css, scope) {
+    var out = "", i = 0, n = css.length;
+    while (i < n) {
+      while (i < n && /\s/.test(css[i])) i++;
+      if (i >= n) break;
+      if (css[i] === "@") {
+        var j = i; while (j < n && css[j] !== "{" && css[j] !== ";") j++;
+        var prelude = css.slice(i, j).trim();
+        var name = (prelude.match(/^@([\w-]+)/) || [])[1] || "";
+        if (j >= n || css[j] === ";") { out += prelude + ";\n"; i = j + 1; continue; }
+        var ab = _readBlock(css, j);
+        out += /^(media|supports|container|layer)$/i.test(name)
+          ? prelude + " {\n" + _scopeBlock(ab.inner, scope) + "}\n"
+          : prelude + " {" + ab.inner + "}\n"; // keyframes/font-face/page 原样
+        i = ab.end; continue;
+      }
+      var k = i; while (k < n && css[k] !== "{" && css[k] !== "}") k++;
+      if (k >= n || css[k] === "}") { i = k + 1; continue; }
+      var blk = _readBlock(css, k);
+      out += _scopeSel(css.slice(i, k), scope) + " {" + blk.inner + "}\n";
+      i = blk.end;
+    }
+    return out;
+  }
+  function scopeDeckCss(css, scope) {
+    return _scopeBlock(String(css).replace(/\/\*[\s\S]*?\*\//g, ""), scope || CARD_SCOPE);
   }
 
   function CardMaker(opts) {
@@ -214,8 +270,21 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.textarea.addEventListener("input", function () { self._applyEditor(); });
   };
 
+  // 把每个 deck 级 <style> 限定到 .cm-cards 作用域，杜绝其全局选择器污染平台 UI；
+  // 顺带把 :root 令牌落到 .cm-cards（比 .cm-app[data-preset] 离卡片更近、令牌覆盖才生效，
+  // 修复"改字号无效/标题换行重叠"）。作者原文保留在 __cmSrc（JS 属性，不进 outerHTML），
+  // 使 getHTML/保存/导出/回喂 LLM 始终拿到干净未加前缀的 CSS。幂等。
+  CardMaker.prototype._scopeDeckStyles = function () {
+    Array.prototype.forEach.call(this.cardsWrap.querySelectorAll("style"), function (st) {
+      if (st.__cmSrc == null) st.__cmSrc = st.textContent;
+      var scoped = scopeDeckCss(st.__cmSrc, CARD_SCOPE);
+      if (st.textContent !== scoped) st.textContent = scoped;
+    });
+  };
+
   // 重新收集卡片（编辑后或初始化时调用）
   CardMaker.prototype.refresh = function () {
+    this._scopeDeckStyles();
     this.cards = Array.prototype.slice.call(this.cardsWrap.querySelectorAll(".card"));
     if (this.index >= this.cards.length) this.index = Math.max(0, this.cards.length - 1);
 
@@ -231,8 +300,16 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     });
     this._applyFonts();
     this._render();
+    this._enforceChecks(); // 生成后检查：字号过小等违反约定的，钉回约定值
     this._fit();
     this._save();
+  };
+
+  // 生成后检查器（见 checks.js）：对已渲染的真实 DOM 体检并自动纠正可确定性修复的问题。
+  // 检查器本身的异常不应阻断渲染，故隔离告警。
+  CardMaker.prototype._enforceChecks = function () {
+    try { runChecks(this.cards, this.preset); }
+    catch (e) { console.warn("[CardMaker] 检查器异常：", e); }
   };
 
   // ---------- 存档：自动存到 localStorage，刷新自动恢复 ----------
@@ -363,10 +440,15 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     scope.setAttribute("data-preset", preset);
     scope.style.cssText = "position:relative;inset:auto;display:block;background:none;overflow:hidden;width:" +
       widthPx + "px;height:" + Math.round(P.h * scale) + "px";
-    var inner = el("div");
+    var inner = el("div", "cm-thumb");
     inner.style.cssText = "width:" + P.w + "px;height:" + P.h + "px;transform-origin:top left;transform:scale(" + scale + ")";
-    // 关键：带上 deck 级 <style>（freeform 自定义 CSS），否则布局会错位
-    Array.prototype.forEach.call(tmp.querySelectorAll("style"), function (s) { inner.appendChild(s.cloneNode(true)); });
+    // 带上 deck 级 <style>（freeform 自定义 CSS），但限定到本缩略图的 .cm-thumb 作用域，
+    // 否则其 body{}/*{}/.card{} 等全局选择器会泄漏出去污染整页平台 UI。
+    Array.prototype.forEach.call(tmp.querySelectorAll("style"), function (s) {
+      var c = s.cloneNode(true);
+      c.textContent = scopeDeckCss(c.textContent, ".cm-thumb");
+      inner.appendChild(c);
+    });
     card.classList.remove("is-active");
     card.style.width = P.w + "px";
     card.style.height = P.h + "px";
@@ -654,6 +736,8 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     Array.prototype.forEach.call(this.cardsWrap.childNodes, function (n) {
       if (n.nodeType !== 1) return;
       if (n.classList.contains("card")) parts.push(self._cardHTML(n));
+      // deck 级 <style> 还原成作者原文（去掉运行时加的 .cm-cards 作用域前缀）
+      else if (n.tagName === "STYLE" && n.__cmSrc != null) parts.push("<style>\n" + n.__cmSrc + "\n</style>");
       else parts.push(n.outerHTML);
     });
     return parts.join("\n\n");

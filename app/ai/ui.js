@@ -236,7 +236,7 @@ async function runRender() {
       const prev = S.sections[i - 1] || "";
       const sec = await renderPage(
         S.cfg, S.preset, S.P, S.plan, S.designStyle, S.plan.pages[i], prev, i + 1, total,
-        function (txt) { ovStream("排版第 " + (i + 1) + " 页", txt); livePreviewWith(S.designStyle, sec0(txt), S.preset); }
+        function (txt, thinking) { ovStream("排版第 " + (i + 1) + " 页" + (thinking ? "（思考中）" : ""), txt); if (!thinking) livePreviewWith(S.designStyle, sec0(txt), S.preset); }
       );
       S.sections[i] = sec;
       S.nextIdx = i + 1;
@@ -370,7 +370,7 @@ async function applyEditOne(els) {
   try {
     const sec = await editPage(
       cfg, preset, P, deckStyle(app), currentHTML, feedback, idx + 1, total,
-      function (txt) { ovStream("修改第 " + (idx + 1) + " 页", txt); livePreviewWith(deckStyle(app), sec0(txt), preset); }
+      function (txt, thinking) { ovStream("修改第 " + (idx + 1) + " 页" + (thinking ? "（思考中）" : ""), txt); if (!thinking) livePreviewWith(deckStyle(app), sec0(txt), preset); }
     );
     clearInterval(timer);
     app.patchDeck({ pages: { [idx]: sec } }); // 只替换第 idx 页——页码由我们锁定，模型无权改别页
@@ -437,7 +437,7 @@ async function rerenderAll(app, designStyle) {
       const sec = await editPage(
         cfg, preset, P, designStyle, cur,
         "按新的全局风格重新设计这一页的版式与配色，内容信息保持不变。", i + 1, total,
-        function (txt) { ovStream("重绘第 " + (i + 1) + " 页", txt); livePreviewWith(designStyle, sec0(txt), preset); }
+        function (txt, thinking) { ovStream("重绘第 " + (i + 1) + " 页" + (thinking ? "（思考中）" : ""), txt); if (!thinking) livePreviewWith(designStyle, sec0(txt), preset); }
       );
       app.patchDeck({ pages: { [i]: sec } });
       app.goTo(i);

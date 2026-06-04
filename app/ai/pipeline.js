@@ -6,12 +6,14 @@
 import { callModel, extractSection, extractStyle } from "./model.js";
 import { planPrompt, designPrompt, renderPrompt, editPrompt, stylePrompt } from "./prompts.js";
 
-// 把 callModel 的「先思考(reasoning) 后正文(content)」两路流，归一成一个 onStream(text)
+// 把 callModel 的「先思考(reasoning) 后正文(content)」两路流，归一成一个 onStream(text, isReasoning)。
+// 第二个参数标记这段是【思考】还是【正文】——思考绝不能渲染进卡片预览（推理模型常在思考里
+// 草拟带 <section> 的半成品 + 大段计划文字，渲染出来就是一卡片乱码）。调用方据此分流。
 function adapt(onStream) {
   let contentStarted = false;
   return [
-    function onDelta(full) { contentStarted = true; if (onStream) onStream(full); },
-    function onThink(r) { if (!contentStarted && onStream) onStream(r); },
+    function onDelta(full) { contentStarted = true; if (onStream) onStream(full, false); },
+    function onThink(r) { if (!contentStarted && onStream) onStream(r, true); },
   ];
 }
 

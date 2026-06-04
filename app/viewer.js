@@ -34,6 +34,57 @@
   }
   function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
 
+  // deck <style> 作用域隔离（与 deck.js 同款）：把规则限定到 .cm-cards，杜绝 body{}/*{}/.card{}
+  // 等全局选择器泄漏污染页面；:root/html/body 映射到 .cm-cards（承载令牌覆盖与页面级背景）。
+  var CARD_SCOPE = ".cm-cards";
+  function _readBlock(css, open) {
+    var depth = 0, i = open, n = css.length;
+    for (; i < n; i++) { var c = css[i]; if (c === "{") depth++; else if (c === "}" && --depth === 0) { i++; break; } }
+    return { inner: css.slice(open + 1, i - 1), end: i };
+  }
+  function _splitTop(sel) {
+    var parts = [], buf = "", p = 0, b = 0;
+    for (var i = 0; i < sel.length; i++) { var c = sel[i];
+      if (c === "(") p++; else if (c === ")") p--; else if (c === "[") b++; else if (c === "]") b--;
+      if (c === "," && !p && !b) { parts.push(buf); buf = ""; } else buf += c; }
+    parts.push(buf); return parts;
+  }
+  function _scopeSel(sel, scope) {
+    return _splitTop(sel).map(function (s) { var t = s.trim();
+      if (!t) return t;
+      if (/^(:root|html|body)$/i.test(t)) return scope;
+      if (t === scope || t.indexOf(scope + " ") === 0) return t;
+      return scope + " " + t;
+    }).join(", ");
+  }
+  function _scopeBlock(css, scope) {
+    var out = "", i = 0, n = css.length;
+    while (i < n) {
+      while (i < n && /\s/.test(css[i])) i++;
+      if (i >= n) break;
+      if (css[i] === "@") {
+        var j = i; while (j < n && css[j] !== "{" && css[j] !== ";") j++;
+        var prelude = css.slice(i, j).trim();
+        var name = (prelude.match(/^@([\w-]+)/) || [])[1] || "";
+        if (j >= n || css[j] === ";") { out += prelude + ";\n"; i = j + 1; continue; }
+        var ab = _readBlock(css, j);
+        out += /^(media|supports|container|layer)$/i.test(name)
+          ? prelude + " {\n" + _scopeBlock(ab.inner, scope) + "}\n"
+          : prelude + " {" + ab.inner + "}\n";
+        i = ab.end; continue;
+      }
+      var k = i; while (k < n && css[k] !== "{" && css[k] !== "}") k++;
+      if (k >= n || css[k] === "}") { i = k + 1; continue; }
+      var blk = _readBlock(css, k);
+      out += _scopeSel(css.slice(i, k), scope) + " {" + blk.inner + "}\n";
+      i = blk.end;
+    }
+    return out;
+  }
+  function scopeDeckCss(css, scope) {
+    return _scopeBlock(String(css).replace(/\/\*[\s\S]*?\*\//g, ""), scope || CARD_SCOPE);
+  }
+
   function Viewer(root) {
     this.root = root;
     var p = root.getAttribute("data-preset");
@@ -81,7 +132,16 @@
     this.btnNext.onclick = function () { self.next(); };
   };
 
+  // 把每个 deck 级 <style> 限定到 .cm-cards 作用域（杜绝全局选择器污染 + :root 令牌就近生效）。幂等。
+  Viewer.prototype._scopeDeckStyles = function () {
+    Array.prototype.forEach.call(this.cardsWrap.querySelectorAll("style"), function (st) {
+      if (st.__cmSrc == null) st.__cmSrc = st.textContent;
+      var scoped = scopeDeckCss(st.__cmSrc, CARD_SCOPE);
+      if (st.textContent !== scoped) st.textContent = scoped;
+    });
+  };
   Viewer.prototype.refresh = function () {
+    this._scopeDeckStyles();
     this.cards = Array.prototype.slice.call(this.cardsWrap.querySelectorAll(".card"));
     if (this.index >= this.cards.length) this.index = Math.max(0, this.cards.length - 1);
     this.dots.innerHTML = "";
