@@ -89,13 +89,13 @@
 }
 
 /* 暗色滚动条（应用界面 / 编辑器 / 弹窗 / 生成蒙版；不影响卡片内容本身） */
-.cm-app, .cm-app *, .cmai, .cmai *, .cmai-gen, .cmai-gen * {
+.cm-app, .cm-app *, .cmai, .cmai *, .cm-ai-panel, .cm-ai-panel * {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 }
 .cm-app ::-webkit-scrollbar,
 .cmai ::-webkit-scrollbar,
-.cmai-gen ::-webkit-scrollbar,
+.cm-ai-panel ::-webkit-scrollbar,
 .cm-editor .CodeMirror-vscrollbar::-webkit-scrollbar,
 .cm-editor .CodeMirror-hscrollbar::-webkit-scrollbar {
   width: 10px;
@@ -103,14 +103,14 @@
 }
 .cm-app ::-webkit-scrollbar-track,
 .cmai ::-webkit-scrollbar-track,
-.cmai-gen ::-webkit-scrollbar-track,
+.cm-ai-panel ::-webkit-scrollbar-track,
 .cm-editor .CodeMirror-vscrollbar::-webkit-scrollbar-track,
 .cm-editor .CodeMirror-hscrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .cm-app ::-webkit-scrollbar-thumb,
 .cmai ::-webkit-scrollbar-thumb,
-.cmai-gen ::-webkit-scrollbar-thumb,
+.cm-ai-panel ::-webkit-scrollbar-thumb,
 .cm-editor .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
 .cm-editor .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
@@ -120,14 +120,14 @@
 }
 .cm-app ::-webkit-scrollbar-thumb:hover,
 .cmai ::-webkit-scrollbar-thumb:hover,
-.cmai-gen ::-webkit-scrollbar-thumb:hover,
+.cm-ai-panel ::-webkit-scrollbar-thumb:hover,
 .cm-editor .CodeMirror-vscrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.34);
   background-clip: content-box;
 }
 .cm-app ::-webkit-scrollbar-corner,
 .cmai ::-webkit-scrollbar-corner,
-.cmai-gen ::-webkit-scrollbar-corner { background: transparent; }
+.cm-ai-panel ::-webkit-scrollbar-corner { background: transparent; }
 
 .cm-toolbar {
   flex: none;
@@ -330,48 +330,47 @@
 
 /* footer / header 是固定的结构性 chrome：绝对定位钉在卡片边缘，每页同位置。
    正文不会自动避让它们，作者需自己留出上下空间。 */
+/* 页眉/页脚 = 常规流（不再绝对定位）。配合 .cm-main 的 flex:1，页眉顶在上、页脚沉在下，
+   正文撑开中间——内容再多也只会把页脚往下推、绝不盖到它们上面（根治"文字重叠页眉页脚"）。
+   封面等 cm-middle 居中页内容稀疏，页眉页脚仍钉边（见下方特例，不会重叠）。 */
 .cm-footer {
-  position: absolute;
-  left: var(--cm-pad);
-  right: var(--cm-pad);
-  bottom: var(--cm-pad);
-  z-index: 2;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--cm-gap);
+  margin-top: auto;        /* 常规流下钉到底部：无论有没有 .cm-main，页脚都沉底、不浮在中间 */
   padding-top: var(--cm-gap);
   font-size: var(--cm-text-sm);
   color: var(--cm-muted);
   border-top: 1px solid var(--cm-line);
 }
 .cm-header {
-  position: absolute;
-  left: var(--cm-pad);
-  right: var(--cm-pad);
-  top: var(--cm-pad);
-  z-index: 2;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--cm-gap);
+  margin-bottom: var(--cm-gap);
   font-size: var(--cm-text-sm);
   color: var(--cm-muted);
 }
+/* 主内容区：撑满页眉页脚之间、默认居中。内容多则占满、少则居中，绝不与页眉页脚重叠。 */
+.cm-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: var(--cm-gap); }
+/* 居中页（封面/金句）内容稀疏：页眉页脚钉在卡片上下边，主标题在中间居中 */
+.card.cm-middle .cm-header { position: absolute; left: var(--cm-pad); right: var(--cm-pad); top: var(--cm-pad); margin: 0; z-index: 2; }
+.card.cm-middle .cm-footer { position: absolute; left: var(--cm-pad); right: var(--cm-pad); bottom: var(--cm-pad); margin: 0; z-index: 2; }
 /* PPT 演示稿：页脚做小做轻（运行信息，不抢正文）；页眉做成左对齐标题栏 */
 .cm-app[data-preset="ppt"] .cm-footer {
-  bottom: 24px;             /* 更靠底边 */
   font-size: 14px;         /* 角注级小字 */
   padding-top: 12px;
   border-top-color: var(--cm-line);
 }
 .cm-app[data-preset="ppt"] .cm-header {
-  top: 40px;
-  font-size: 46px;          /* 页眉即本页标题：醒目、左对齐、全程同位置 */
-  font-weight: 800;
-  color: var(--cm-fg);
-  padding-bottom: 18px;
-  border-bottom: 2px solid var(--cm-line);
+  font-size: 24px;          /* 页眉小字条（页脚级），别抢正文 */
+  color: var(--cm-muted);
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--cm-line);
 }
 .cm-app[data-preset="ppt"] .cm-header .cm-sm,
 .cm-app[data-preset="ppt"] .cm-header small { font-size: 22px; font-weight: 600; color: var(--cm-muted); }

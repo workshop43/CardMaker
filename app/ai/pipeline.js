@@ -35,14 +35,16 @@ function parsePlan(text) {
   return plan;
 }
 
-// 2) 全局设计系统：返回一个 <style> 字符串
-export async function makeDesign(cfg, preset, P, plan, onStream) {
-  const { sys, user } = designPrompt(preset, P, plan);
+// 2) 设计视觉系统 + 一张样板页：返回 { style, section }。
+//    模型在真实内容里设计（不空想），样板页供用户先确认风格再铺开全套。
+export async function makeDesignSample(cfg, preset, P, plan, samplePage, onStream) {
+  const { sys, user } = designPrompt(preset, P, plan, samplePage);
   const [onDelta, onThink] = adapt(onStream);
   const text = await callModel(cfg, sys, user, onDelta, onThink);
   const style = extractStyle(text);
-  if (!style) throw new Error("设计系统未返回 <style>，请重试。");
-  return style;
+  if (!style) throw new Error("设计未返回 <style>，请重试。");
+  const section = extractSection(text); // 样板页可能没出来（不致命，预览时回退到纯样式）
+  return { style, section };
 }
 
 // 3) 逐页排版：返回单个 <section> 字符串（链式，prevHTML 为上一页）
