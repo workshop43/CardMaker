@@ -35,45 +35,57 @@ function parsePlan(text) {
   return plan;
 }
 
+// 自动重试一次：format 错误（style/section 为空）时，重试往往就能拿到——不立刻报错给用户。
+async function withRetry(fn, validate, errMsg) {
+  let r = await fn();
+  if (validate(r)) return r;
+  r = await fn(); // 重试一次
+  if (validate(r)) return r;
+  throw new Error(errMsg);
+}
+
 // 2) 设计视觉系统 + 一张样板页：返回 { style, section }。
-//    模型在真实内容里设计（不空想），样板页供用户先确认风格再铺开全套。
+//    style 是必须的，section 可选（样板页没出来时预览回退，不阻塞流程）。
 export async function makeDesignSample(cfg, preset, P, plan, samplePage, onStream) {
-  const { sys, user } = designPrompt(preset, P, plan, samplePage);
-  const [onDelta, onThink] = adapt(onStream);
-  const text = await callModel(cfg, sys, user, onDelta, onThink);
-  const style = extractStyle(text);
-  if (!style) throw new Error("设计未返回 <style>，请重试。");
-  const section = extractSection(text); // 样板页可能没出来（不致命，预览时回退到纯样式）
-  return { style, section };
+  const run = () => {
+    const { sys, user } = designPrompt(preset, P, plan, samplePage);
+    const [onDelta, onThink] = adapt(onStream);
+    return callModel(cfg, sys, user, onDelta, onThink).then((text) => ({
+      style: extractStyle(text), section: extractSection(text),
+    }));
+  };
+  return withRetry(run, (r) => !!r.style, "设计未返回 <style>，已重试仍失败，请再试一次。");
 }
 
 // 3) 逐页排版：返回单个 <section> 字符串（链式，prevHTML 为上一页）
 export async function renderPage(cfg, preset, P, plan, designStyle, pageSpec, prevHTML, pageNum, total, onStream) {
-  const { sys, user } = renderPrompt(preset, P, plan, designStyle, pageSpec, prevHTML, pageNum, total);
-  const [onDelta, onThink] = adapt(onStream);
-  const text = await callModel(cfg, sys, user, onDelta, onThink);
-  const sec = extractSection(text);
-  if (!sec) throw new Error("第 " + pageNum + " 页未返回 <section>，可重试这一页。");
-  return sec;
+  const run = () => {
+    const { sys, user } = renderPrompt(preset, P, plan, designStyle, pageSpec, prevHTML, pageNum, total);
+    const [onDelta, onThink] = adapt(onStream);
+    return callModel(cfg, sys, user, onDelta, onThink).then((text) => extractSection(text));
+  };
+  return withRetry(run, (s) => !!s, "第 " + pageNum + " 页未返回 <section>，已重试仍失败。");
 }
 
 // 4) 编辑单页：返回修改后的单个 <section>（页码由调用方锁定，模型只看这一页）
 export async function editPage(cfg, preset, P, designStyle, currentHTML, feedback, pageNum, total, onStream) {
-  const { sys, user } = editPrompt(preset, P, designStyle, currentHTML, feedback, pageNum, total);
-  const [onDelta, onThink] = adapt(onStream);
-  const text = await callModel(cfg, sys, user, onDelta, onThink);
-  const sec = extractSection(text);
-  if (!sec) throw new Error("未返回修改后的 <section>，请重试。");
-  return sec;
+  const run = () => {
+    const { sys, user } = editPrompt(preset, P, designStyle, currentHTML, feedback, pageNum, total);
+    const [onDelta, onThink] = adapt(onStream);
+    return callModel(cfg, sys, user, onDelta, onThink).then((text) => extractSection(text));
+  };
+  return withRetry(run, (s) => !!s, "修改后未返回 <section>，已重试仍失败。");
 }
 
 // 5) 整套样式修改：改全局 <style>，返回 { style, font }（font 为可选的 data-font key）
 export async function editStyle(cfg, preset, P, currentStyle, feedback, onStream) {
-  const { sys, user } = stylePrompt(preset, P, currentStyle, feedback);
-  const [onDelta, onThink] = adapt(onStream);
-  const text = await callModel(cfg, sys, user, onDelta, onThink);
-  const style = extractStyle(text);
-  if (!style) throw new Error("未返回 <style>，请重试。");
-  const fontM = text.match(/<!--\s*FONT\s+([a-z]+)\s*-->/i);
-  return { style: style, font: fontM ? fontM[1] : null };
+  const run = () => {
+    const { sys, user } = stylePrompt(preset, P, currentStyle, feedback);
+    const [onDelta, onThink] = adapt(onStream);
+    return callModel(cfg, sys, user, onDelta, onThink).then((text) => {
+      const fontM = text.match(/<!--\s*FONT\s+([a-z]+)\s*-->/i);
+      return { style: extractStyle(text), font: fontM ? fontM[1] : null };
+    });
+  };
+  return withRetry(run, (r) => !!r.style, "未返回 <style>，已重试仍失败。");
 }

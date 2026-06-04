@@ -147,16 +147,37 @@ export function countCards(html) {
   return m ? m.length : 0;
 }
 
-// 抽出单个 <section>…</section>（render 阶段每页只回一张卡）
+// 剥掉文本里所有 markdown 代码围栏（```lang ... ```），保留内容。
+// 用于提取函数的二次尝试：先直接找标签，找不到再剥围栏重找。
+function stripAllFences(text) {
+  return text.replace(/```[\w-]*\r?\n?([\s\S]*?)```/g, "$1");
+}
+
+// 抽出单个 <section>…</section>（render 阶段每页只回一张卡）。
+// 容错顺序：① 直接 regex，② 剥所有围栏后重找。
 export function extractSection(text) {
-  const s = stripThink(text).replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/i, "");
-  const m = s.match(/<section[\s\S]*<\/section>/i);
+  const base = stripThink(text);
+  // ① 直接找
+  let m = base.match(/<section[\s\S]*<\/section>/i);
+  if (m) return m[0];
+  // ② 剥所有围栏后找
+  m = stripAllFences(base).match(/<section[\s\S]*<\/section>/i);
   return m ? m[0] : "";
 }
 
-// 抽出一个 <style>…</style>（design 阶段的全局设计系统）
+// 抽出一个 <style>…</style>（design 阶段的全局设计系统）。
+// 容错顺序：① 直接 regex，② 剥所有围栏后重找，③ 从 ```css 块提取纯 CSS 并补标签。
 export function extractStyle(text) {
-  const s = stripThink(text).replace(/^```(?:css|html)?\s*/i, "").replace(/```\s*$/i, "");
-  const m = s.match(/<style[\s\S]*<\/style>/i);
-  return m ? m[0] : "";
+  const base = stripThink(text);
+  // ① 直接找
+  let m = base.match(/<style[\s\S]*?<\/style>/i);
+  if (m) return m[0];
+  // ② 剥所有围栏后找
+  const stripped = stripAllFences(base);
+  m = stripped.match(/<style[\s\S]*?<\/style>/i);
+  if (m) return m[0];
+  // ③ 兜底：模型输出了纯 CSS（没有 <style> 标签），从 ```css/```styles 块里提取并包裹
+  const cssBlock = base.match(/```(?:css|styles?|scss)?\s*\n?([\s\S]+?)```/i);
+  if (cssBlock && cssBlock[1].trim()) return "<style>\n" + cssBlock[1].trim() + "\n</style>";
+  return "";
 }
