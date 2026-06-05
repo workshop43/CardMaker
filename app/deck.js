@@ -70,7 +70,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     htmlToImage: "https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js",
     jszip: "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
   };
-  var EXPORT_TEXT_SCALE = 0.98;
+  var EXPORT_TEXT_SCALE = 0.95;
 
   // CodeMirror 5（编辑器，打开编辑面板时才懒加载；失败则退回 textarea）
   var CM_VER = "5.65.16";
