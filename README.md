@@ -126,7 +126,7 @@ python3 -m http.server 8765
 
 `light` · `dark` · `warm` · `ink` · `mint` · `gradient` · `ocean` · `sky` · `sunset` · `forest` · `paper` · `bold` · `pastel` · `tech` · `cream` · `night`，写在卡片的 `data-theme` 上。建议整套统一一个主题。想要专属配色，在 section 上内联改 token：`style="--cm-accent:ACCENT_COLOR"`。
 
-## 字体（可选 web 字体）
+## 字体
 
 默认用系统苹方（零加载、出图稳）。想要更有设计感的中文字体，在 deck 根或单卡加 `data-font`：
 
@@ -134,7 +134,7 @@ python3 -m http.server 8765
 <div data-cardmaker data-preset="xiaohongshu" data-font="song">
 ```
 
-可选：`hei` 思源黑体 · `song` 思源宋体 · `kai` 霞鹜文楷 · `smiley` 得意黑 · `xiaowei` 文艺宋 · `kuaile` 站酷快乐体 · `mao` 毛笔书法。运行时按需从 CDN 懒加载，导出前自动等字体就绪再出图，保证嵌入。字体表见 [`cardmaker.js`](./cardmaker.js) 的 `FONTS`，可自行增删。
+可选：`hei` 系统黑体 · `song` 系统宋体 · `kai` 霞鹜文楷 · `smiley` 得意黑 · `xiaowei` 文艺宋降级 · `kuaile` 活泼圆体降级 · `mao` 书法体降级。默认不依赖 Google Fonts；只有字体表里配置了 `css` 的字体才会按需加载。字体表见 [`app/deck.js`](./app/deck.js) 的 `FONTS`，可自行增删。
 
 ## 快捷键
 

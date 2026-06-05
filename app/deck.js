@@ -101,16 +101,16 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     document.head.appendChild(l);
   }
 
-  // 可选中文 web 字体注册表。deck 或单卡用 data-font="key" 选用，按需从 CDN 懒加载。
-  // family 为 CSS font-family；css 为字体样式表地址（均 CORS 友好，可被 html-to-image 嵌入导出）。
+  // 可选中文字体注册表。优先使用系统字体栈；只有 css 非空的字体才按需懒加载。
+  // 线上默认不依赖 Google Fonts，避免网络/插件拦截导致部署环境出现 css2?family=... 失败请求。
   var FONTS = {
-    hei:     { label: "思源黑体（现代）", family: "'Noto Sans SC', sans-serif",  css: "https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap" },
-    song:    { label: "思源宋体（编辑）", family: "'Noto Serif SC', serif",     css: "https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&display=swap" },
+    hei:     { label: "系统黑体（现代）", family: "'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif", css: "" },
+    song:    { label: "系统宋体（编辑）", family: "'Songti SC', 'STSong', 'SimSun', serif", css: "" },
     kai:     { label: "霞鹜文楷（文学）", family: "'LXGW WenKai', serif",        css: "https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont/style.css" },
     smiley:  { label: "得意黑（潮流标题）", family: "'Smiley Sans', sans-serif",  css: "https://cdn.jsdelivr.net/npm/smiley-sans/index.css" },
-    xiaowei: { label: "站酷小薇（文艺宋）", family: "'ZCOOL XiaoWei', serif",     css: "https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&display=swap" },
-    kuaile:  { label: "站酷快乐体（活泼）", family: "'ZCOOL KuaiLe', cursive",    css: "https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap" },
-    mao:     { label: "马善政（毛笔书法）", family: "'Ma Shan Zheng', cursive",   css: "https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" },
+    xiaowei: { label: "文艺宋（本地降级）", family: "'Songti SC', 'STSong', 'SimSun', serif", css: "" },
+    kuaile:  { label: "活泼圆体（本地降级）", family: "'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif", css: "" },
+    mao:     { label: "书法体（本地降级）", family: "'Songti SC', 'STKaiti', 'KaiTi', serif", css: "" },
   };
   var _fontLoaded = {};
   function ensureFont(key) {

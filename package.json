@@ -9,7 +9,7 @@
     "dev": "npx --yes serve -l 8765 .",
     "start": "npx --yes serve -l 8765 .",
     "preview": "npx --yes serve -l 8765 .",
-    "build": "rm -rf dist && mkdir -p dist/examples && cp index.html cardmaker.css cardmaker.js cardmaker-ai.js cardmaker.config.js dist/ && cp examples/*.html dist/examples/",
+    "build": "rm -rf dist && mkdir -p dist/examples && cp index.html cardmaker.css dist/ && cp -r app dist/ && cp examples/*.html dist/examples/",
     "deploy:cf": "npm run build && npx -y wrangler@latest pages deploy dist --project-name=cardmaker --branch=main --commit-dirty=true",
     "deploy": "npm run deploy:cf"
   },

@@ -14,19 +14,19 @@
     ppt: { w: 1280, h: 720 },
     story: { w: 1080, h: 1920 },
   };
-  // data-font 中文 web 字体（key → CSS font-family + 样式表地址），按需懒加载
+  // data-font 中文字体：优先系统字体栈；只有 css 非空的字体才按需懒加载。
   var FONTS = {
-    hei:     { family: "'Noto Sans SC', sans-serif", css: "https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap" },
-    song:    { family: "'Noto Serif SC', serif",     css: "https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&display=swap" },
+    hei:     { family: "'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif", css: "" },
+    song:    { family: "'Songti SC', 'STSong', 'SimSun', serif", css: "" },
     kai:     { family: "'LXGW WenKai', serif",        css: "https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont/style.css" },
     smiley:  { family: "'Smiley Sans', sans-serif",  css: "https://cdn.jsdelivr.net/npm/smiley-sans/index.css" },
-    xiaowei: { family: "'ZCOOL XiaoWei', serif",     css: "https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&display=swap" },
-    kuaile:  { family: "'ZCOOL KuaiLe', cursive",    css: "https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap" },
-    mao:     { family: "'Ma Shan Zheng', cursive",   css: "https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" },
+    xiaowei: { family: "'Songti SC', 'STSong', 'SimSun', serif", css: "" },
+    kuaile:  { family: "'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif", css: "" },
+    mao:     { family: "'Songti SC', 'STKaiti', 'KaiTi', serif", css: "" },
   };
   var _fontLoaded = {};
   function ensureFont(key) {
-    if (_fontLoaded[key] || !FONTS[key]) return;
+    if (_fontLoaded[key] || !FONTS[key] || !FONTS[key].css) return;
     _fontLoaded[key] = true;
     var l = document.createElement("link");
     l.rel = "stylesheet"; l.href = FONTS[key].css;
