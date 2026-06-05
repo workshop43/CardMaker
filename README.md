@@ -6,7 +6,7 @@
 
 纯静态 · 零构建 · LLM 友好
 
-[Cloudflare Pages 在线访问](https://cardmaker.pages.dev)
+[Cloudflare Pages 在线访问](https://cardmaker-450.pages.dev)
 
 </div>
 
