@@ -18,8 +18,8 @@ function adapt(onStream) {
 }
 
 // 1) 大纲：返回解析后的 plan 对象 {title,vibe,theme,font,pages:[{role,title,points}]}
-export async function makePlan(cfg, preset, pages, topic, onStream) {
-  const { sys, user } = planPrompt(preset, pages, topic);
+export async function makePlan(cfg, preset, pages, topic, context, onStream) {
+  const { sys, user } = planPrompt(preset, pages, topic, context);
   const [onDelta, onThink] = adapt(onStream);
   const text = await callModel(cfg, sys, user, onDelta, onThink);
   return parsePlan(text);
@@ -100,9 +100,9 @@ async function withRetry(fn, validate, errMsg) {
 
 // 2) 设计视觉系统 + 一张样板页：返回 { style, section }。
 //    style 是必须的，section 可选（样板页没出来时预览回退，不阻塞流程）。
-export async function makeDesignSample(cfg, preset, P, plan, samplePage, samplePageNum, total, onStream) {
+export async function makeDesignSample(cfg, preset, P, plan, samplePage, samplePageNum, total, context, onStream) {
   const run = () => {
-    const { sys, user } = designPrompt(preset, P, plan, samplePage, samplePageNum, total);
+    const { sys, user } = designPrompt(preset, P, plan, samplePage, samplePageNum, total, context);
     const [onDelta, onThink] = adapt(onStream);
     return callModel(cfg, sys, user, onDelta, onThink).then((text) => ({
       style: extractStyle(text), section: normalizePageNumber(sanitizeSection(extractSection(text), samplePage && samplePage.role), samplePageNum, total),
@@ -112,9 +112,9 @@ export async function makeDesignSample(cfg, preset, P, plan, samplePage, sampleP
 }
 
 // 3) 逐页排版：返回单个 <section> 字符串（链式，prevHTML 为上一页）
-export async function renderPage(cfg, preset, P, plan, designStyle, pageSpec, prevHTML, pageNum, total, layoutReferenceHTML, onStream) {
+export async function renderPage(cfg, preset, P, plan, designStyle, pageSpec, prevHTML, pageNum, total, layoutReferenceHTML, context, onStream) {
   const run = () => {
-    const { sys, user } = renderPrompt(preset, P, plan, designStyle, pageSpec, prevHTML, pageNum, total, layoutReferenceHTML);
+    const { sys, user } = renderPrompt(preset, P, plan, designStyle, pageSpec, prevHTML, pageNum, total, layoutReferenceHTML, context);
     const [onDelta, onThink] = adapt(onStream);
     return callModel(cfg, sys, user, onDelta, onThink).then((text) => normalizePageNumber(sanitizeSection(extractSection(text), pageSpec && pageSpec.role), pageNum, total));
   };
@@ -122,23 +122,27 @@ export async function renderPage(cfg, preset, P, plan, designStyle, pageSpec, pr
 }
 
 // 4) 编辑单页：返回修改后的单个 <section>（页码由调用方锁定，模型只看这一页）
-export async function editPage(cfg, preset, P, designStyle, currentHTML, feedback, pageNum, total, referenceHTML, onStream) {
+export async function editPage(cfg, preset, P, designStyle, currentHTML, feedback, pageNum, total, referenceHTML, context, onStream) {
   const run = () => {
-    const { sys, user } = editPrompt(preset, P, designStyle, currentHTML, feedback, pageNum, total, referenceHTML);
+    const { sys, user } = editPrompt(preset, P, designStyle, currentHTML, feedback, pageNum, total, referenceHTML, context);
     const [onDelta, onThink] = adapt(onStream);
-    return callModel(cfg, sys, user, onDelta, onThink).then((text) => normalizePageNumber(sanitizeSection(extractSection(text), pageRoleFromSection(currentHTML)), pageNum, total));
+    return callModel(cfg, sys, user, onDelta, onThink).then((text) =>
+      normalizePageNumber(sanitizeSection(extractSection(text), pageRoleFromSection(currentHTML), currentHTML, designStyle), pageNum, total)
+    );
   };
   return withRetry(run, (s) => !!s, "修改后未返回 <section>，已重试仍失败。");
 }
 
 // 清理单页输出里的局部视觉系统：页面只能复用 deck 级 <style>，不能自带局部 <style> 或视觉 inline style。
-function sanitizeSection(section, role) {
+function sanitizeSection(section, role, lockedHTML, sharedStyle) {
   if (!section || typeof DOMParser === "undefined") return section;
   const doc = new DOMParser().parseFromString(section, "text/html");
   const card = doc.body.querySelector("section");
   if (!card) return section;
+  const lockedCard = lockedHTML ? new DOMParser().parseFromString(lockedHTML, "text/html").body.querySelector("section") : null;
   const pageRole = role || card.getAttribute("data-role") || "";
   if (!allowsMiddleLayout(pageRole)) card.classList.remove("cm-middle");
+  lockSectionVisualContract(card, lockedCard);
   card.querySelectorAll("style").forEach((node) => node.remove());
   card.querySelectorAll("[style]").forEach((node) => {
     const kept = sanitizeInlineStyle(node.getAttribute("style") || "");
@@ -146,6 +150,34 @@ function sanitizeSection(section, role) {
     else node.removeAttribute("style");
   });
   return card.outerHTML;
+}
+
+function lockSectionVisualContract(card, lockedCard) {
+  if (!lockedCard) return;
+  ["data-theme", "data-font", "data-role"].forEach((name) => {
+    if (lockedCard.hasAttribute(name)) card.setAttribute(name, lockedCard.getAttribute(name));
+    else card.removeAttribute(name);
+  });
+  card.className = lockedCard.className;
+}
+
+// 单页 inline style 只保留布局和文字排版密度，视觉系统属性仍由 deck 级 <style> 管。
+function sanitizeInlineStyle(styleText) {
+  return String(styleText || "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((decl) => {
+      const i = decl.indexOf(":");
+      if (i <= 0) return false;
+      return isAllowedInlineStyleProp(decl.slice(0, i).trim().toLowerCase());
+    })
+    .join("; ");
+}
+
+// 判断 inline style 属性是否属于布局/文字排版密度，而不是配色、装饰或风格系统。
+function isAllowedInlineStyleProp(prop) {
+  return /^(font-size|line-height|font-weight|text-align|display|grid-template|grid-template-columns|grid-template-rows|grid-column|grid-row|flex|flex-basis|flex-direction|flex-wrap|align-items|align-self|justify-content|gap|row-gap|column-gap|width|min-width|max-width|height|min-height|max-height|padding|padding-top|padding-right|padding-bottom|padding-left|margin|margin-top|margin-right|margin-bottom|margin-left)$/i.test(prop);
 }
 
 function pageRoleFromSection(section) {
@@ -157,25 +189,6 @@ function pageRoleFromSection(section) {
 
 function allowsMiddleLayout(role) {
   return /^(cover|ending|quote)$/i.test(String(role || ""));
-}
-
-// 只保留布局相关 inline style；颜色、字体、背景、阴影、边框等视觉属性必须来自全局 class。
-function sanitizeInlineStyle(styleText) {
-  return String(styleText || "")
-    .split(";")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .filter((decl) => {
-      const prop = decl.split(":")[0].trim().toLowerCase();
-      return prop && !isVisualStyleProp(prop);
-    })
-    .join("; ");
-}
-
-// 判断 CSS 属性是否属于视觉系统，而不是页面结构布局。
-function isVisualStyleProp(prop) {
-  return prop.indexOf("--") === 0 ||
-    /^(color|background|background-.+|font|font-.+|text-shadow|box-shadow|filter|backdrop-filter|border|border-.+|outline|outline-.+|border-radius|opacity|mix-blend-mode|isolation|clip-path|mask|mask-.+|fill|stroke|stroke-.+|text-decoration|text-decoration-.+|letter-spacing)$/i.test(prop);
 }
 
 // 修正模型从示例或上一页里抄错的独立页码，限定在页脚/页码类元素，避免误改正文里的比例或日期。
@@ -194,17 +207,17 @@ function normalizePageNumber(section, pageNum, total) {
 }
 
 // 5) 页面结构调整：只改 plan.pages，用调用方复用/重排/补生成页面。
-export async function revisePlanStructure(cfg, plan, feedback, currentPageNum, onStream) {
-  const { sys, user } = structurePrompt(plan, feedback, currentPageNum);
+export async function revisePlanStructure(cfg, plan, feedback, currentPageNum, context, onStream) {
+  const { sys, user } = structurePrompt(plan, feedback, currentPageNum, context);
   const [onDelta, onThink] = adapt(onStream);
   const text = await callModel(cfg, sys, user, onDelta, onThink);
   return parsePlan(text);
 }
 
 // 6) 整套样式修改：改全局 <style>，返回 { style, font }（font 为可选的 data-font key）
-export async function editStyle(cfg, preset, P, currentStyle, feedback, deckReferenceHTML, onStream) {
+export async function editStyle(cfg, preset, P, currentStyle, feedback, deckReferenceHTML, context, onStream) {
   const run = () => {
-    const { sys, user } = stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML);
+    const { sys, user } = stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML, context);
     const [onDelta, onThink] = adapt(onStream);
     return callModel(cfg, sys, user, onDelta, onThink).then((text) => {
       const fontM = text.match(/<!--\s*FONT\s+([a-z]+)\s*-->/i);

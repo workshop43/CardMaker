@@ -15,7 +15,7 @@ CardMaker 是一个轻量的卡片设计运行时。你（或 LLM）用 HTML/CSS
 - 📐 **固定比例画布** — 小红书 3:4、方形 1:1、PPT 16:9、竖屏 9:16，原生像素渲染
 - 🎬 **放映** — 翻页、键盘控制、全屏，像演示一样展示
 - 🖼️ **一键出图** — 单张 / 批量打包，导出 2x 高清 PNG（基于 [html-to-image](https://github.com/bubkoo/html-to-image)）
-- 💾 **存档不丢** — 自动存本地，刷新自动恢复；「导出 HTML」可导出**自包含的单文件 deck**（运行时内联），双击即开放映、可分享；回到 CardMaker 点「上传 HTML」可导入再编辑
+- 💾 **存档不丢** — 自动存本地，刷新自动恢复；「导出 HTML」可导出**自包含的单文件 deck**（运行时内联），双击即开放映、可分享；回到 CardMaker 点「导入 HTML」可导入再编辑
 - 🤖 **为 AI 而生** — 把 [`PROMPT.md`](./PROMPT.md) 喂给 LLM，它就能直接产出整个 deck
 
 没有构建步骤，没有依赖安装。`clone` 下来双击 HTML 就能用，也能直接挂 GitHub Pages。
@@ -74,7 +74,7 @@ python3 -m http.server 8765
 
 ## 导入已保存的 HTML
 
-点击工具栏的「上传 HTML」，选择之前通过「导出 HTML」下载的 `.html` 文件。CardMaker 会自动提取文件里的 `[data-cardmaker]` deck，同步原来的比例、标题、字体和卡片内容，并打开编辑器让你继续修改当前页。
+点击工具栏的「导入 HTML」，选择之前通过「导出 HTML」下载的 `.html` 文件。CardMaker 会自动提取文件里的 `[data-cardmaker]` deck，同步原来的比例、标题、字体和卡片内容。需要编辑源码时，再点击「编辑」打开编辑器。
 
 ## 让 AI 帮你做
 

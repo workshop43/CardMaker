@@ -236,7 +236,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.presetSel.onchange = function () { self.loadExample(self.presetSel.value); };
     this.btnEdit = el("button", "cm-btn", "编辑");
     this.btnPresent = el("button", "cm-btn", "放映");
-    this.btnImport = el("button", "cm-btn", "上传 HTML");
+    this.btnImport = el("button", "cm-btn", "导入 HTML");
     this.btnSave = el("button", "cm-btn", "导出 HTML");
     this.btnExport = el("button", "cm-btn", "当前页导出 PNG");
     this.btnExportAll = el("button", "cm-btn cm-primary", "打包导出 PNG");
@@ -448,8 +448,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.font = info.font || "";
     this.setHTML(info.html);
     this.goTo(0);
-    if (!this.app.classList.contains("is-editing")) this.toggleEditor();
-    else this._syncEditor();
+    this._syncEditor();
     this._toast("已打开 " + title);
     return true;
   };

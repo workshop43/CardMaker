@@ -8,7 +8,7 @@
      （字号/排版/配色交回模型）。不写「你是世界顶尖…」这类角色扮演。
    ② 内容在 plan 阶段定稿（完整文案），render 只排版、不再编内容。
    ③ 样式在 design 阶段连同一张样板页一起产出，先确认再铺开全套。
-   ④ 版面用常规流（.cm-header / .cm-main / .cm-footer），不靠绝对定位 chrome——结构上杜绝文字重叠。
+   ④ 版面用常规流（.cm-header / .cm-main / .cm-footer），不靠绝对定位 chrome。
    ============================================================= */
 
 const THEMES = "light dark warm ink mint gradient ocean sky sunset forest paper bold pastel tech cream night";
@@ -33,17 +33,28 @@ function canvasBlock(preset, P) {
   return [
     "【硬约束】",
     "- 一个 <section class=\"card\"> 就是整页 " + P.w + "×" + P.h + "px，按真实像素设计；布局自由。内容超出 " + P.h + "px 会被裁切。",
+    "- 正文不是整页画布：页眉、标题、副标题、页脚、padding 会占用空间；当前真实正文区域看上下文 layout_metrics.main 的 client_height / scroll_height。",
     "- 自定义背景务必同时设文字色（深底配浅字、浅底配深字），别只改背景不改 --cm-fg。",
     "- 禁止 <html>/<head>/<body>、``` 围栏、解释文字、<script>、外链图片/字体/CSS。换字体用 data-font（" + FONTS + "）。",
     TOKENS,
   ].join("\n");
 }
 
-// 极简版面结构（常规流，杜绝绝对定位 chrome 导致的重叠）。这是系统约定，不是设计审美。
+// 所有模型调用都带同一份运行上下文：画布、运行时组件 CSS、当前 deck 级 style、公共 class。
+function contextBlock(context) {
+  if (!context) return "";
+  return [
+    "【完整运行上下文：画布 / style / 组件】",
+    JSON.stringify(context, null, 2),
+  ].join("\n");
+}
+
+// 极简版面结构（常规流，避免绝对定位 chrome）。这是系统约定，不是设计审美。
 const LAYOUT = [
   "【版面结构 · 常规流，别用绝对定位钉页眉页脚】",
   "把一页排成三段常规流：可选页眉 <div class=\"cm-header\">…</div>、主内容 <div class=\"cm-main\">…</div>、可选页脚 <div class=\"cm-footer\"><span>左</span><span>右（页码）</span></div>。",
-  "- 主内容【必须】放进 .cm-main——它会自动撑满页眉与页脚之间，所以正文/标题/要点再多也【绝不会盖到页眉页脚】。标题、副标题、要点都放 .cm-main 里，常规流从上到下排，你自由设计版式。",
+  "- 主内容放进 .cm-main；.cm-main 的可用高度不是整页高度，必须结合 layout_metrics.main 的 client_height、scroll_height 和 main_overflows 判断。",
+  "- 标题、副标题、要点都放 .cm-main 里，常规流从上到下排；内容多时需要自行调整字号、行高、间距、列数或内容密度。",
   "- 封面 / 金句这种极简页：给 <section> 加 class=\"cm-middle\"（内容垂直居中，页眉页脚自动钉上下边）。",
   "- 别用 position:absolute 去钉页眉/页脚/标题（运行时已处理）；页码就是页脚右侧 <span>，不另做。页码必须使用当前任务给你的真实页码，不要沿用任何示例数字。",
 ].join("\n");
@@ -51,24 +62,34 @@ const LAYOUT = [
 const STYLE_POLICY = [
   "【风格边界】",
   "- 全套视觉风格必须集中在 deck 级 <style>：颜色、字体、阴影、背景、边框、圆角、装饰、组件质感都由全局样式控制。",
-  "- 单页 <section> 只负责内容结构与排版组合：选择已有 class、组织 .cm-header/.cm-main/.cm-footer、调整信息层级。",
-  "- render/edit 阶段禁止在单页里另起视觉系统：不要输出 <style>，不要新增未在全局 <style> 中定义的视觉 class，不要用 style 属性写颜色/字体/背景/阴影/边框/圆角。",
-  "- 如确需微调布局，style 属性只能用于纯布局值（如 grid-template、flex、gap、width、height），不能用于视觉值。",
+  "- 单页 <section> 负责内容结构与排版组合：可以使用公共 class、当前共享 style 里的 class，也可以自行组织语义 class 和 DOM 结构。",
+  "- render/edit 阶段不要输出 <style>；颜色、背景、阴影、边框、圆角等视觉系统优先来自 deck 级 <style> 或 CSS 变量。",
+  "- 页面局部排版密度可以用 style 属性调整布局和文字尺寸，例如 font-size、line-height、gap、grid-template、width/height。",
 ].join("\n");
 
 const COMPONENT_POLICY = [
   "【跨页组件规范】",
   "- header/footer/title/subtitle/page number/section label/内容块样式都是跨页组件，不是每页临时发挥的装饰。",
   "- design 阶段必须在全局 <style> 中定义这些组件的视觉和间距规范；后续页面只复用这些组件。",
-  "- render/edit 阶段必须沿用已确认页面中的 header/footer 信息结构、标题/副标题层级、页码位置、主内容块密度和组件组合节奏。",
+  "- header/footer/page number/title/subtitle 这些跨页 chrome 保持同一套视觉系统。",
+  "- 正文内容区可以重组 DOM 结构、组件组合和信息层级；页面之间可以使用不同正文版式。",
   "- 页面之间可以换内容版式，但不能换 UI 系统；同类角色页面的 title/subtitle/header/footer 必须有稳定位置、稳定层级、稳定样式。",
 ].join("\n");
 
 const ROLE_LAYOUT_POLICY = [
-  "【页面角色与标题位置】",
+  "【页面角色与布局】",
   "- cover/ending/quote 可以使用 cm-middle 和封面式大标题。",
-  "- content/data 是正文页：不要使用 cm-middle；标题、副标题、正文块都放在 .cm-main 常规流里，从上到下排，不要套用封面/封底的垂直居中标题位置。",
-  "- 正文页标题用于建立信息层级，不是封面主视觉；正文页必须给内容块留足高度，避免标题过大挤压正文。",
+  "- content/data 是正文页，通常由标题、副标题、正文块组成，放在 .cm-main 常规流里。",
+  "- 页面内容必须在固定画布内完整呈现。",
+].join("\n");
+
+const OVERFLOW_POLICY = [
+  "【输出前版面自检】",
+  "- 输出前必须用上下文里的 layout_metrics 判断正文显示区，而不是只按整页画布估算。",
+  "- 检查 .cm-main：内容高度不能超过 client_height，也不要贴近底部；应保留可感知的安全余量。",
+  "- 检查正文里的容器、卡块、分栏、网格、callout、band、feature row：文字不能溢出容器，也不要贴近容器边界。",
+  "- 如果正文区或局部容器有溢出/贴边风险，自行选择更适合的版式，或降低 font-size、line-height、gap、padding，或减少列数/改变分栏比例。",
+  "- 允许用公共组件，也允许自行设计 DOM 结构；最终结果必须完整落在正文显示区和各自容器内。",
 ].join("\n");
 
 // 页码规则：每次只给当前页的确定值，避免模型从示例里抄出错误总页数。
@@ -91,10 +112,10 @@ export function pageContentText(pg) {
 }
 
 // ---------- 1) PLAN：内容定稿（每页完整文案 + 场景，输出 JSON） ----------
-export function planPrompt(preset, pages, topic) {
+export function planPrompt(preset, pages, topic, context) {
   const pageLine = pages
     ? "页数：恰好 " + pages + " 页（pages 数组长度必须是 " + pages + "）。"
-    : "页数：由你根据主题、受众、内容复杂度和用户输入自行决定；如果用户在主题里指定页数，必须遵守。";
+    : "页数：结合主题、受众、内容复杂度和输入约束自行决定。";
   const sys = [
     "把主题拆成一套卡片 deck，并写出每页的【完整文案】——是最终要印在卡片上的字，而不是粗略提纲。",
     "先定场景（scene）：这套是干什么用的、给谁看、什么调性，一两句话——后续设计据此定风格。",
@@ -107,6 +128,8 @@ export function planPrompt(preset, pages, topic) {
     "配色盘：" + THEMES,
     "字体：" + FONTS,
     "整套用同一 theme/font。role 用上面给定的值。",
+    "",
+    contextBlock(context),
   ].join("\n");
   const user = "主题 / 要求：" + topic + "\n比例：" + preset + "\n" + pageLine;
   return { sys, user };
@@ -122,8 +145,8 @@ export function intentPrompt(context, text) {
     "- generate_new：创建一套新 deck，当前画布已有内容时也可以被新 deck 替换",
     "- edit_page：只改变一个页面",
     "- edit_pages：改变多个页面，但不改变页面清单",
-    "- edit_content：定向修改已有页面里的文字、属性、class 或特定组件样式，不重绘页面",
-    "- edit_global_style：改变 deck 级视觉系统或跨页组件规范",
+    "- edit_content：定向修改已有页面里的文字、元素属性、元素 class，或某个具体元素实例的局部排版属性，不重绘页面",
+    "- edit_global_style：改变 deck 级 <style>、selector/class 规则、视觉系统或跨页组件规范",
     "- edit_structure：改变页面清单本身",
     "- unknown：当前上下文不足以判断",
     "",
@@ -131,14 +154,7 @@ export function intentPrompt(context, text) {
     '{"intent":"generate_new|edit_page|edit_pages|edit_content|edit_global_style|edit_structure|unknown","target_pages":[页码数字],"reference_page":页码数字或null,"reason":"简短原因"}',
     "target_pages / reference_page 只在目标是已有页面时填写；创建新 deck 时 target_pages 为空数组。",
     "",
-    "分类优先级：",
-    "- 用户要求替换/删除/改写某些文字、批量替换词句、修改 header/footer/title/某个内容块里的具体文案，归为 edit_content。",
-    "- 用户要求更新特定组件的 class、属性、局部 inline style，或只改某个元素/某类元素的样式，归为 edit_content。",
-    "- 用户要求重排某一页、补充某页内容、让某页更好看，归为 edit_page/edit_pages。",
-    "- 用户要求整体换风格、全套 UI/配色/字体/组件规范一起变化，才归为 edit_global_style。",
-    "- 用户要求增删页面、调整页数或顺序，归为 edit_structure。",
-    "",
-    "根据用户输入和当前上下文的整体语义自行判断 intent、目标页和参考页。若操作意图或必要目标无法确定，返回 unknown，让产品追问用户。不要执行任务，只返回判断结果。",
+    "结合输入和当前上下文自行判断 intent、目标页和参考页；信息不足时返回 unknown。不要执行任务，只返回判断结果。",
   ].join("\n");
   const user = [
     "当前上下文：\n" + JSON.stringify(context, null, 2),
@@ -148,7 +164,7 @@ export function intentPrompt(context, text) {
 }
 
 // ---------- 2) DESIGN：设计视觉系统 + 用真实内容排一张样板页（输出 <style> + <section>） ----------
-export function designPrompt(preset, P, plan, samplePage, samplePageNum, total) {
+export function designPrompt(preset, P, plan, samplePage, samplePageNum, total, context) {
   const roles = Array.from(new Set((plan.pages || []).map((p) => p.role || "content"))).join("、");
   const sampleRole = (samplePage && samplePage.role) || "content";
   const sys = [
@@ -164,10 +180,12 @@ export function designPrompt(preset, P, plan, samplePage, samplePageNum, total) 
     STYLE_POLICY,
     COMPONENT_POLICY,
     ROLE_LAYOUT_POLICY,
+    OVERFLOW_POLICY,
     pageNumberLine(samplePageNum, total),
     "⚠ 不要重定义 .card / .cm-main / .cm-header / .cm-footer 的 position 或 .card 的 width/height/margin/overflow——版面结构与画布尺寸由运行时负责，你只管配色、字体、字号、间距、装饰这些视觉。",
     "",
     canvasBlock(preset, P),
+    contextBlock(context),
     "",
     "样板页要排的真实内容：\n" + pageContentText(samplePage || { role: "content" }),
     "",
@@ -179,7 +197,7 @@ export function designPrompt(preset, P, plan, samplePage, samplePageNum, total) 
 }
 
 // ---------- 3) RENDER：用定稿内容排某一页（套用全局样式，链式承接） ----------
-export function renderPrompt(preset, P, plan, designStyle, pageSpec, prevHTML, pageNum, total, layoutReferenceHTML) {
+export function renderPrompt(preset, P, plan, designStyle, pageSpec, prevHTML, pageNum, total, layoutReferenceHTML, context) {
   const role = pageSpec.role || "content";
   const sys = [
     "把【已定稿的内容】排成第 " + pageNum + " / " + total + " 页，输出【一个 <section class=\"card\" data-theme=\"…\" data-role=\"" + role + "\">…</section>】。",
@@ -193,16 +211,18 @@ export function renderPrompt(preset, P, plan, designStyle, pageSpec, prevHTML, p
     STYLE_POLICY,
     COMPONENT_POLICY,
     ROLE_LAYOUT_POLICY,
+    OVERFLOW_POLICY,
     pageNumberLine(pageNum, total),
-    "复用全局设计系统的 class/令牌（配色/字体），别另起炉灶。新增页面必须看起来像同一套 deck 的自然延续，不允许创造另一套 UI 风格。",
+    "可以复用全局设计系统的 class/令牌，也可以自行组织正文 DOM 和语义 class；新增页面必须看起来像同一套 deck 的自然延续。",
     "",
     "全局设计系统 + 组件（已生效，直接套用，不要重复输出这个 <style>）：",
     designStyle || "（无，自己按令牌配色）",
     "",
-    "已确认页面规范参考（只学习跨页组件规范和排版节奏，不复制其内容）：",
+    "已确认页面规范参考（只学习跨页 chrome、色彩、字体、组件视觉，不复制其内容）：",
     layoutReferenceHTML || "（无）",
     "",
     canvasBlock(preset, P),
+    contextBlock(context),
     "",
     "【只输出这一页的 <section>…</section>，不要 <style>、不要别页、不要解释文字、不要 ``` 围栏。】",
   ].join("\n");
@@ -214,36 +234,30 @@ export function renderPrompt(preset, P, plan, designStyle, pageSpec, prevHTML, p
 }
 
 // ---------- 4) EDIT：只改目标页；可复用全局组件样式，不能改 deck 级 style ----------
-export function editPrompt(preset, P, designStyle, currentHTML, feedback, pageNum, total, referenceHTML) {
+export function editPrompt(preset, P, designStyle, currentHTML, feedback, pageNum, total, referenceHTML, context) {
   const sys = [
     "【模式：单页修改】修改一套卡片 deck 里的【第 " + pageNum + " / " + total + " 页】——只能改这一页。",
-    "下面给你当前页 HTML 和可选参考页 HTML，返回当前页修改后的完整 <section>。",
-    "禁止新增、删除、重排其他页面；禁止输出整套内容大纲；禁止改变本页之外的 deck 内容。",
+    "返回当前页修改后的完整 <section>。",
+    "可以重组本页 .cm-main 内的 DOM 结构、正文组件组合和信息层级；跨页 header/footer/page number 仍复用当前视觉系统。",
+    "不要输出其他页面、整套大纲、解释文字或代码围栏。",
     "",
     mediumBlock(preset, P),
-    "",
-    LAYOUT,
+    canvasBlock(preset, P),
     STYLE_POLICY,
     COMPONENT_POLICY,
-    ROLE_LAYOUT_POLICY,
+    OVERFLOW_POLICY,
     pageNumberLine(pageNum, total),
-    "必须保留单页边界：只输出一个 <section class=\"card\">，且内容仍放在 .cm-header/.cm-main/.cm-footer 这些结构容器中；别给结构容器加 position:absolute。",
-    "根据修改意见和参考页语义完成本页调整：可以调整 data-theme/data-role，可以替换、增加或移除当前页上的 class，但只能使用全局 <style> 已定义或参考页已使用的 class。",
-    "允许清理当前页里造成风格不一致的局部视觉写法，例如 inline 的颜色、字体、背景、阴影、边框、圆角；允许保留或新增纯布局 inline 值。",
-    "涉及视觉一致性时，只移动元素位置或调整间距不算完成；需要让颜色、字体层级、组件形态、背景/边框/阴影/标签等视觉语言对齐参考页。",
-    "不要复制参考页文案；保留当前页业务内容，只迁移视觉语言、组件形态、密度、层级和排版节奏。",
+    contextBlock(context),
     "",
-    "全局设计系统 + 组件（已生效，直接套用，不要重复输出）：",
+    "当前共享 <style> 与公共 class 清单（只读；这些 class 可用但不强制，也可以自行设计正文结构和语义 class；不要输出或修改 <style>）：",
     designStyle || "（无）",
-    "",
-    canvasBlock(preset, P),
     "",
     "【只输出这一页修改后的 <section>…</section>，绝不输出别页、不要 <style>、不要解释文字、不要 ``` 围栏。】",
   ].join("\n");
   const user = [
     "任务类型：只修改当前这一页。",
     "当前页 HTML：\n" + currentHTML,
-    referenceHTML ? "参考页 HTML（只学习视觉风格、密度、组件形态，不复制参考页内容）：\n" + referenceHTML : "",
+    referenceHTML ? "参考页 HTML（只学习视觉风格和跨页 chrome，不复制参考页内容）：\n" + referenceHTML : "",
     "修改意见：\n" + (feedback || "优化这一页主内容区的排版与设计；全局组件保持不动。"),
   ].filter(Boolean).join("\n\n");
   return { sys, user };
@@ -252,20 +266,19 @@ export function editPrompt(preset, P, designStyle, currentHTML, feedback, pageNu
 // ---------- 4.5) CONTENT PATCH：定向修改已有 DOM 内容 / 组件属性 / 局部样式 ----------
 export function contentPatchPrompt(context, feedback) {
   const sys = [
-    "【模式：定向内容/组件补丁】根据用户要求修改已有 CardMaker deck，但不要重绘页面、不要改全局 <style>、不要输出 <section>。",
-    "你只返回一个 JSON patch，由前端按选择器在 DOM 上执行。适合：批量替换文字、删除某个 header/footer 文案、替换特定组件内容、给某个组件加/删 class、改特定组件的局部样式或属性。",
+    "【模式：定向内容/组件补丁】修改已有 CardMaker deck。不要重绘页面、不要改全局 <style>、不要输出 <section>。",
+    "只返回一个 JSON patch，由前端按选择器在 DOM 上执行。",
     "",
     "输出结构：",
-    '{"ops":[{"op":"replace_text","page":"all 或页码数字","selector":"CSS 选择器或空字符串","from":"原文字","to":"新文字","mode":"exact|contains|regex"},{"op":"set_text","page":"all 或页码数字","selector":"CSS 选择器","text":"新文本"},{"op":"set_html","page":"all 或页码数字","selector":"CSS 选择器","html":"安全 HTML 片段"},{"op":"remove","page":"all 或页码数字","selector":"CSS 选择器"},{"op":"set_attr","page":"all 或页码数字","selector":"CSS 选择器","name":"属性名","value":"属性值"},{"op":"remove_attr","page":"all 或页码数字","selector":"CSS 选择器","name":"属性名"},{"op":"add_class","page":"all 或页码数字","selector":"CSS 选择器","class":"类名 空格分隔"},{"op":"remove_class","page":"all 或页码数字","selector":"CSS 选择器","class":"类名 空格分隔"},{"op":"set_style","page":"all 或页码数字","selector":"CSS 选择器","style":"CSS 声明，如 color:#fff; gap:16px"}]}',
+    '{"ops":[{"op":"replace_text","page":"all 或页码数字","selector":"CSS 选择器或空字符串","from":"原文字","to":"新文字","mode":"exact|contains|regex"},{"op":"set_text","page":"all 或页码数字","selector":"CSS 选择器","text":"新文本"},{"op":"set_html","page":"all 或页码数字","selector":"CSS 选择器","html":"安全 HTML 片段"},{"op":"remove","page":"all 或页码数字","selector":"CSS 选择器"},{"op":"set_attr","page":"all 或页码数字","selector":"CSS 选择器","name":"属性名","value":"属性值"},{"op":"remove_attr","page":"all 或页码数字","selector":"CSS 选择器","name":"属性名"},{"op":"add_class","page":"all 或页码数字","selector":"CSS 选择器","class":"类名 空格分隔"},{"op":"remove_class","page":"all 或页码数字","selector":"CSS 选择器","class":"类名 空格分隔"},{"op":"set_style","page":"all 或页码数字","selector":"CSS 选择器","style":"CSS 声明"}]}',
     "",
     "规则：",
     "- 只输出 JSON，禁止解释文字、禁止 ``` 围栏。",
-    "- page 使用用户明确指定的页；若用户说全套/每页/所有页面，用 \"all\"；若未指定页但提到当前页组件，使用当前页。",
+    "- page 可取页码数字或 \"all\"。",
     "- selector 要尽量精确。header 用 .cm-header，footer 用 .cm-footer，主内容用 .cm-main；右上角 header 常见选择器是 .cm-header span:last-child。",
     "- replace_text 可 selector 为空，表示在目标页所有文本节点里替换；如果给 selector，只在该组件内替换。",
-    "- 删除某段文字但保留组件，优先用 replace_text 把 from 替换为空；删除整个元素才用 remove。",
     "- set_html 只能使用安全片段，禁止 <script>、<style>、外链资源。",
-    "- 不要为了局部文字需求返回全页重绘。",
+    "- set_style 只用于具体元素实例的布局和文字排版尺寸，例如 font-size、line-height、gap、grid-template、width/height；不要用它处理 class 级样式或全局 style 修改。",
   ].join("\n");
   const user = [
     "当前 deck 上下文：\n" + JSON.stringify(context, null, 2),
@@ -275,7 +288,7 @@ export function contentPatchPrompt(context, feedback) {
 }
 
 // ---------- 5) STRUCTURE：增删页面 / 调整页面顺序（只改 plan，不直接产 HTML） ----------
-export function structurePrompt(plan, feedback, currentPageNum) {
+export function structurePrompt(plan, feedback, currentPageNum, context) {
   const pages = (plan.pages || []).map((p, i) => ({
     id: "p" + (i + 1),
     role: p.role || "content",
@@ -284,7 +297,7 @@ export function structurePrompt(plan, feedback, currentPageNum) {
     content: p.content || [],
   }));
   const sys = [
-    "【模式：页面结构调整】根据用户意见调整 deck 的页面清单，只处理增加页面、删除页面、减少页数、调整页面顺序。",
+    "【模式：页面结构调整】调整 deck 的页面清单，只处理增加页面、删除页面、减少页数、调整页面顺序。",
     "不要输出 HTML，不要写 <section>，不要改全局样式。你只返回新的 plan JSON。",
     "保留不在本次结构调整范围内的页面：原有页面必须带回它的 id；新增页面 id 写 \"new\"。",
     "删除页面：从 pages 数组移除对应原有页面。",
@@ -294,6 +307,8 @@ export function structurePrompt(plan, feedback, currentPageNum) {
     "",
     "【只输出一个 JSON，禁止解释文字、禁止 ``` 围栏】，结构：",
     '{"title":"整套标题","scene":"用途/受众/调性","theme":"主题 key","font":"字体 key","pages":[{"id":"p1 或 new","role":"cover|content|data|quote|ending","title":"完整标题","subtitle":"完整副标题，可空","content":[{"heading":"小标题，可空","text":"完整说明句"}]}]}',
+    "",
+    contextBlock(context),
   ].join("\n");
   const user = [
     "当前页序号：" + currentPageNum,
@@ -310,18 +325,23 @@ export function structurePrompt(plan, feedback, currentPageNum) {
 }
 
 // ---------- 6) STYLE：整套样式修改（改全局 <style>，所有页随之变） ----------
-export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML) {
+export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML, context) {
   const sys = [
     "修改一套卡片 deck 的【全局设计系统 <style>】——它定义整套的配色、字体、全局组件和工具类，每页都复用。改它，所有页一起变。",
-    "按用户意见调整配色 / 强调色、字体、组件外观、整体风格、跨页组件规范——设计判断由你做主。",
-    "优先处理 header/footer/title/subtitle/page number/内容块/section label 等跨页组件的样式、间距、层级和密度一致性。",
+    "可按用户意见精确修改已有 selector/class 规则，也可补充新的 class 规则；保留不相关规则和当前视觉系统。",
+    "可调整配色 / 强调色、字体、组件外观、整体风格、跨页组件规范——设计判断由你做主。",
+    "可调整 header/footer/title/subtitle/page number/内容块/section label 等跨页组件的样式、间距、层级和密度一致性。",
     "【保留 .cm-header / .cm-main / .cm-footer 的常规流结构，别给它们加 position:absolute】——只改视觉（配色/字体/线条/质感），别动版面结构，否则各页会对不齐。",
+    "不要输出 <section>，不要把 class 级样式分散写进每页 section 的 style 属性。",
     "若换中文字体：在 <style> 之前单独输出一行 <!--FONT key-->（key 从 " + FONTS + " 里选）。",
     "",
     mediumBlock(preset, P),
+    canvasBlock(preset, P),
     STYLE_POLICY,
     COMPONENT_POLICY,
+    OVERFLOW_POLICY,
     TOKENS,
+    contextBlock(context),
     "",
     "【只输出修改后的完整 <style>…</style>（若换字体则其前面加一行 <!--FONT key-->），不要 <section>、不要解释文字、不要 ``` 围栏。】",
   ].join("\n");

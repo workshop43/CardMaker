@@ -222,7 +222,7 @@ async function runIntent(app, cfg, text) {
   const m = streamMsg();
   m.setText("正在理解需求…");
   try {
-    const intent = await classifyIntent(runCfg, intentContext(app), text);
+    const intent = await classifyIntent(runCfg, fullDeckContext(app, { purpose: "intent" }), text);
     m.done();
     m.setHtml("已理解需求，开始处理。");
     endJob(job);
@@ -246,9 +246,6 @@ function routeIntent(app, cfg, text, intent) {
     return;
   }
   if (!ensureSessionFromDeck(app, cfg)) return runGenerate(app, cfg, text);
-  if (intent.intent === "edit_global_style" && shouldPreferContentPatch(text)) {
-    intent.intent = "edit_content";
-  }
   if (intent.intent === "edit_structure") {
     runStructureEdit(app, cfg, text);
   } else if (intent.intent === "edit_global_style") {
@@ -283,7 +280,7 @@ function runQuickAction(app, key) {
   if (action.type === "page") {
     if (!ensureSessionFromDeck(app, cfg)) { addAIMsg("当前没有可修改的页面。"); return; }
     const sourceIdx = sourcePageIdxFromViewIdx(app.index);
-    runEdit(app, cfg, action.prompt, { intent: "edit_page", target_pages: [sourceIdx + 1], reference_page: null });
+    runEdit(app, cfg, action.prompt, { intent: "edit_page", target_pages: [sourceIdx + 1], reference_page: null, allow_content_change: !!action.allowContentChange });
   }
 }
 
@@ -308,17 +305,18 @@ function quickActionSpec(key) {
     overflow: {
       type: "page",
       label: "页面正文内容溢出容器/页面需重新排版",
-      prompt: "当前页正文内容溢出页面或容器。重新排版当前页，降低标题占用、压缩间距、调整列数或内容块密度，确保正文、页眉、页脚、页码都完整留在页面内，不裁切、不重叠。",
+      prompt: "页面正文内容溢出容器/页面需重新排版",
     },
     reflow: {
       type: "page",
       label: "页面正文内容排版不当，需重新排版",
-      prompt: "当前页正文内容排版不当。重新组织当前页的信息层级、标题、正文块、列布局和留白，让阅读顺序清楚、密度均衡，并保持整套全局样式一致。",
+      prompt: "页面正文内容排版不当，需重新排版",
     },
     expand: {
       type: "page",
       label: "页面正文内容太少，需补充",
-      prompt: "当前页正文内容偏少。基于当前页主题补充必要说明、例子或要点，让页面信息量更充实，同时保持文字适合当前画布且不溢出。",
+      prompt: "页面正文内容太少，需补充",
+      allowContentChange: true,
     },
   };
   return actions[key] || null;
@@ -349,6 +347,247 @@ function intentContext(app) {
   };
 }
 
+// 构造所有 LLM 调用共享的完整运行上下文，保证每种操作都知道同一份画布、style 和组件信息。
+function fullDeckContext(app, opts) {
+  const options = opts || {};
+  const preset = (S && S.preset) || app.preset;
+  const PSet = CardMaker.PRESETS[preset] || CardMaker.PRESETS[app.preset];
+  const baseStyle = options.styleText || currentDesignStyle(app) || "";
+  const styleContext = editStyleContext(app, baseStyle);
+  const cards = app.cards || [];
+  const runtimeCss = runtimeComponentCss();
+  const context = {
+    purpose: options.purpose || "general",
+    canvas: {
+      preset,
+      label: PSet && PSet.label,
+      width: PSet && PSet.w,
+      height: PSet && PSet.h,
+      unit: "px",
+      fixed_image_canvas: true,
+      overflow_behavior: "content outside the section height is clipped by the exported image canvas",
+    },
+    runtime_component_css: runtimeCss,
+    deck_style: {
+      source: styleContext.source,
+      text: styleContext.text,
+    },
+    components: {
+      classes: styleContext.classes,
+      used_classes: Array.from(new Set(classesFromCurrentDeck(app))).sort(),
+    },
+    page_inline_style_capabilities: {
+      allowed: true,
+      purpose: "layout and text-density tuning on the current page",
+      properties: allowedPageInlineStyleProps(),
+    },
+    layout_metrics: deckLayoutMetrics(app),
+    deck: {
+      has_deck: cards.length > 0,
+      title: app.title || "",
+      total_pages: editTotalPages(app),
+      current_page: cards.length ? app.index + 1 : null,
+      plan: S && S.plan ? {
+        title: S.plan.title || "",
+        scene: S.plan.scene || "",
+        theme: S.plan.theme || "",
+        font: S.plan.font || "",
+        pages: S.plan.pages || [],
+      } : null,
+      pages: deckPageSummaries(app),
+    },
+    style_attachment: uploadedStyle ? {
+      name: uploadedStyle.name,
+      text: uploadedStyle.style,
+    } : null,
+  };
+  logAIContext(context);
+  return context;
+}
+
+// LLM 可用于单页排版密度微调的 inline style 属性；执行层会按同一组属性过滤。
+function allowedPageInlineStyleProps() {
+  return [
+    "font-size", "line-height", "font-weight", "text-align",
+    "display", "grid-template", "grid-template-columns", "grid-template-rows", "grid-column", "grid-row",
+    "flex", "flex-basis", "flex-direction", "flex-wrap", "align-items", "align-self", "justify-content",
+    "gap", "row-gap", "column-gap",
+    "width", "min-width", "max-width", "height", "min-height", "max-height",
+    "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+    "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
+  ];
+}
+
+// 从当前 deck 里提取每页摘要，作为所有操作的页面边界和组件位置上下文。
+function deckPageSummaries(app) {
+  const cards = app.cards || [];
+  return cards.map((card, i) => ({
+    page: i + 1,
+    current: i === app.index,
+    role: card.getAttribute("data-role") || "",
+    theme: card.getAttribute("data-theme") || "",
+    font: card.getAttribute("data-font") || "",
+    classes: String(card.getAttribute("class") || "").split(/\s+/).filter(Boolean),
+    header: compactText((card.querySelector(".cm-header") || {}).textContent || "").slice(0, 300),
+    title: compactText((card.querySelector("h1,h2,.cm-display,.cm-title") || card).textContent || "").slice(0, 300),
+    subtitle: compactText((card.querySelector(".cm-subtitle") || {}).textContent || "").slice(0, 300),
+    footer: compactText((card.querySelector(".cm-footer") || {}).textContent || "").slice(0, 300),
+    text: compactText(card.textContent || "").slice(0, 1200),
+  }));
+}
+
+// 把当前真实 DOM 的盒模型和关键 computed style 传给模型，避免它只凭 CSS 猜页面边界。
+function deckLayoutMetrics(app) {
+  const cards = app.cards || [];
+  return cards.map((card, i) => {
+    const cardBox = elementMetrics(card, card);
+    const main = card.querySelector(".cm-main");
+    const header = card.querySelector(".cm-header");
+    const footer = card.querySelector(".cm-footer");
+    return {
+      page: i + 1,
+      current: i === app.index,
+      card: cardBox,
+      header: elementMetrics(header, card),
+      main: elementMetrics(main, card),
+      footer: elementMetrics(footer, card),
+      available_content_area: {
+        selector: ".cm-main",
+        width: main ? Math.round(main.clientWidth || 0) : null,
+        height: main ? Math.round(main.clientHeight || 0) : null,
+        content_scroll_height: main ? Math.round(main.scrollHeight || 0) : null,
+        content_fits: !!(main && main.scrollHeight && main.clientHeight && main.scrollHeight <= main.clientHeight + 1),
+      },
+      title: elementMetrics(card.querySelector("h1,h2,.cm-display,.cm-title"), card),
+      subtitle: elementMetrics(card.querySelector(".cm-subtitle"), card),
+      text_density: textDensityMetrics(card),
+      components: Array.from(card.querySelectorAll(".cm-cell,.cm-grid,.cm-split,.cm-row,.cm-col,.cm-flow,.cm-feature-row,.cm-callout,.cm-band,.cm-mosaic,.cm-bento,.cm-compare,.cm-compare-col,.cm-process,.cm-step,.cm-insight,.cm-pullquote,.cm-metric-row,.cm-mini-card,.cm-stat,.cm-checklist,.cm-tag,.cm-chip"))
+        .slice(0, 20)
+        .map((node) => elementMetrics(node, card)),
+      overflow: {
+        card_scroll_height: Math.round(card.scrollHeight || 0),
+        card_client_height: Math.round(card.clientHeight || 0),
+        main_scroll_height: main ? Math.round(main.scrollHeight || 0) : null,
+        main_client_height: main ? Math.round(main.clientHeight || 0) : null,
+        card_overflows: !!(card.scrollHeight && card.clientHeight && card.scrollHeight > card.clientHeight + 1),
+        main_overflows: !!(main && main.scrollHeight && main.clientHeight && main.scrollHeight > main.clientHeight + 1),
+      },
+    };
+  });
+}
+
+// 汇总当前页正文元素的字号/行高，帮助模型判断是否需要缩小正文密度。
+function textDensityMetrics(card) {
+  if (!card || typeof getComputedStyle === "undefined") return null;
+  const nodes = Array.from(card.querySelectorAll(".cm-main p,.cm-main li,.cm-main span,.cm-main h3,.cm-main .cm-cell,.cm-main .cm-feature-body,.cm-main .cm-mini-card"));
+  const samples = nodes.slice(0, 40).map((node) => {
+    const cs = getComputedStyle(node);
+    return {
+      selector: elementSelectorLabel(node),
+      font_size_px: parseCssPx(cs.fontSize),
+      line_height_px: parseCssPx(cs.lineHeight),
+      text: compactText(node.textContent || "").slice(0, 120),
+    };
+  }).filter((item) => item.font_size_px);
+  const sizes = samples.map((item) => item.font_size_px);
+  const lines = samples.map((item) => item.line_height_px).filter(Boolean);
+  return {
+    sample_count: samples.length,
+    min_font_size_px: sizes.length ? Math.min.apply(null, sizes) : null,
+    max_font_size_px: sizes.length ? Math.max.apply(null, sizes) : null,
+    avg_font_size_px: sizes.length ? round2(sizes.reduce((a, b) => a + b, 0) / sizes.length) : null,
+    avg_line_height_px: lines.length ? round2(lines.reduce((a, b) => a + b, 0) / lines.length) : null,
+    samples,
+  };
+}
+
+function parseCssPx(value) {
+  const n = parseFloat(String(value || ""));
+  return Number.isFinite(n) ? round2(n) : null;
+}
+
+// 提取元素相对 card 的位置、尺寸和关键文字/布局 computed style。
+function elementMetrics(node, card) {
+  if (!node || !card || typeof getComputedStyle === "undefined") return null;
+  const rect = node.getBoundingClientRect();
+  const base = card.getBoundingClientRect();
+  const cs = getComputedStyle(node);
+  return {
+    selector: elementSelectorLabel(node),
+    class: node.getAttribute("class") || "",
+    tag: node.tagName ? node.tagName.toLowerCase() : "",
+    x: round2(rect.left - base.left),
+    y: round2(rect.top - base.top),
+    width: round2(rect.width),
+    height: round2(rect.height),
+    scroll_width: Math.round(node.scrollWidth || 0),
+    scroll_height: Math.round(node.scrollHeight || 0),
+    client_width: Math.round(node.clientWidth || 0),
+    client_height: Math.round(node.clientHeight || 0),
+    display: cs.display,
+    position: cs.position,
+    grid_template_columns: cs.gridTemplateColumns,
+    flex_direction: cs.flexDirection,
+    gap: cs.gap,
+    padding: [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].join(" "),
+    margin: [cs.marginTop, cs.marginRight, cs.marginBottom, cs.marginLeft].join(" "),
+    font_family: cs.fontFamily,
+    font_size: cs.fontSize,
+    font_weight: cs.fontWeight,
+    line_height: cs.lineHeight,
+    color: cs.color,
+    background: cs.backgroundColor,
+    text: compactText(node.textContent || "").slice(0, 240),
+  };
+}
+
+function elementSelectorLabel(node) {
+  if (!node) return "";
+  if (node.classList && node.classList.length) return "." + Array.from(node.classList).join(".");
+  return node.tagName ? node.tagName.toLowerCase() : "";
+}
+
+function round2(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+// 每次构造上下文都打印摘要，方便确认模型到底拿到了什么。
+function logAIContext(context) {
+  if (!context || typeof console === "undefined") return;
+  console.info("[CardMaker AI] full context", {
+    purpose: context.purpose,
+    canvas: context.canvas,
+    runtimeCssLength: String(context.runtime_component_css || "").length,
+    deckStyleLength: String(context.deck_style && context.deck_style.text || "").length,
+    classCount: context.components && context.components.classes ? context.components.classes.length : 0,
+    pageCount: context.deck && context.deck.pages ? context.deck.pages.length : 0,
+    currentLayout: (context.layout_metrics || []).find((p) => p.current) || null,
+  });
+}
+
+// 从已加载的 cardmaker.css 中读取真实公共组件 CSS，只保留卡片画布和 cm 组件相关规则。
+function runtimeComponentCss() {
+  if (typeof document === "undefined" || !document.styleSheets) return "";
+  const chunks = [];
+  Array.prototype.forEach.call(document.styleSheets, (sheet) => {
+    const href = sheet.href || "";
+    if (href && href.indexOf("cardmaker.css") < 0) return;
+    let rules;
+    try { rules = sheet.cssRules; } catch (e) { rules = null; }
+    if (!rules) return;
+    Array.prototype.forEach.call(rules, (rule) => {
+      const css = rule && rule.cssText ? String(rule.cssText) : "";
+      if (isCardComponentRule(css)) chunks.push(css);
+    });
+  });
+  return chunks.join("\n");
+}
+
+// 判断一条 CSSOM 规则是否属于卡片运行时、画布尺寸或公共组件定义。
+function isCardComponentRule(css) {
+  return /(\.cm-app\[data-preset=|\.cm-cards|\.card\b|\.cm-(header|main|footer|page|row|col|grid|split|between|items-center|center|middle|top|fill|text-center|muted|accent|sm|text|leading|compact|dense|pad|kicker|display|lead|tag|ghost|num|divider|titlebar|title|subtitle|cell|outline|flow|feature|callout|band|mosaic|bento|compare|process|step|insight|pullquote|metric|mini-card|span|stat|quote|bar|chip|checklist|mt|mb|gap|deco|watermark))/i.test(String(css || ""));
+}
+
 function newConversation(app) {
   S = null;
   uploadedStyle = null;
@@ -369,7 +608,7 @@ async function runGenerate(app, cfg, topic) {
   const m1 = streamMsg();
   m1.setText("正在构思内容大纲…");
   try {
-    S.plan = await makePlan(runCfg, preset, null, topic);
+    S.plan = await makePlan(runCfg, preset, null, topic, fullDeckContext(app, { purpose: "plan" }));
   } catch (e) {
     m1.done();
     m1.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
@@ -397,7 +636,7 @@ async function reviseDraftPlan(app, cfg, feedback) {
   const m = streamMsg();
   m.setText("正在调整内容大纲…");
   try {
-    S.plan = await revisePlanStructure(runCfg, S.plan, feedback, 1);
+    S.plan = await revisePlanStructure(runCfg, S.plan, feedback, 1, fullDeckContext(app, { purpose: "structure" }));
   } catch (e) {
     m.done();
     m.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
@@ -426,7 +665,7 @@ async function runDesign(app) {
       m.setText("正在使用上传样式生成第一个内容页…");
     } else {
       const r = await makeDesignSample(S.cfg, S.preset, S.PSet, S.plan, S.plan.pages[S.sampleIdx],
-        S.sampleIdx + 1, S.plan.pages.length,
+        S.sampleIdx + 1, S.plan.pages.length, fullDeckContext(app, { purpose: "design" }),
         (txt, thinking) => { if (!thinking) m.setText("正在设计风格…"); });
       S.designStyle = r.style;
       S.sampleSection = r.section;
@@ -435,14 +674,14 @@ async function runDesign(app) {
     if (!S.sections[S.sampleIdx]) {
       m.setText("正在生成第一个内容页…");
       S.sections[S.sampleIdx] = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle,
-        S.plan.pages[S.sampleIdx], "", S.sampleIdx + 1, S.plan.pages.length, "");
+        S.plan.pages[S.sampleIdx], "", S.sampleIdx + 1, S.plan.pages.length, "", fullDeckContext(app, { purpose: "render", styleText: S.designStyle }));
     }
 
     const coverIdx = pickCoverIdx(S.plan);
     if (coverIdx !== S.sampleIdx && !S.sections[coverIdx]) {
       m.setText("正在生成封面…");
       S.sections[coverIdx] = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle,
-        S.plan.pages[coverIdx], "", coverIdx + 1, S.plan.pages.length, confirmedLayoutReference(coverIdx));
+        S.plan.pages[coverIdx], "", coverIdx + 1, S.plan.pages.length, confirmedLayoutReference(coverIdx), fullDeckContext(app, { purpose: "render", styleText: S.designStyle }));
     }
 
     S.nextIdx = findNextPageIdx();
@@ -491,7 +730,7 @@ async function runRender(app) {
     const i = S.nextIdx;
     m.setText("正在生成第 " + (i + 1) + " / " + total + " 页…");
     const prev = findPrevSection(i);
-    const sec = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle, S.plan.pages[i], prev, i + 1, total, confirmedLayoutReference(i));
+    const sec = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle, S.plan.pages[i], prev, i + 1, total, confirmedLayoutReference(i), fullDeckContext(app, { purpose: "render", styleText: S.designStyle }));
     S.sections[i] = sec;
     S.nextIdx = findNextPageIdx();
     applySections(app);
@@ -518,7 +757,9 @@ async function runEdit(app, cfg, feedback, intent) {
   const referenceIdx = intentReferenceSourceIdx(intent);
   const total = editTotalPages(app), preset = app.preset;
   const PSet = CardMaker.PRESETS[preset];
-  const designStyle = S ? S.designStyle : extractStyleFromDeck(app);
+  const designStyle = currentDesignStyle(app);
+  const styleContext = editStyleContext(app, designStyle);
+  const fullContext = fullDeckContext(app, { purpose: "edit", styleText: styleContext.text });
   const m = streamMsg();
   try {
     const resolvedTargets = resolveEditTargets(app, targets);
@@ -531,10 +772,29 @@ async function runEdit(app, cfg, feedback, intent) {
         ? namedReferenceHTML([{ idx: referenceIdx, html: S.sections[referenceIdx] || "" }])
         : confirmedLayoutReference(sourceIdx);
       m.setText("正在修改第 " + (sourceIdx + 1) + " / " + total + " 页…");
-      let sec = await editPage(runCfg, preset, PSet, designStyle, target.currentHTML, feedback, sourceIdx + 1, total, referenceHTML);
+      console.info("[CardMaker AI] edit context", {
+        preset,
+        canvas: PSet,
+        page: sourceIdx + 1,
+        total,
+        styleSource: styleContext.source,
+        styleLength: styleContext.text.length,
+        classCount: styleContext.classes.length,
+        classes: styleContext.classes.slice(0, 80),
+      });
+      let sec = await editPage(runCfg, preset, PSet, styleContext.text, target.currentHTML, feedback, sourceIdx + 1, total, referenceHTML, fullContext);
+      let textDiff = layoutTextDiff(intent, target.currentHTML, sec);
+      if (textDiff) {
+        console.warn("[CardMaker AI] layout edit changed visible text", { page: sourceIdx + 1, diff: textDiff });
+        sec = await editPage(runCfg, preset, PSet, styleContext.text, target.currentHTML, feedback + "\n\n这是排版/布局修改，不能改写、增删或替换原页面可见文字。请只重组 DOM、class、字号、行高、间距、列数和布局，保留这些可见文字：\n" + originalVisibleText(target.currentHTML), sourceIdx + 1, total, referenceHTML, fullContext);
+        textDiff = layoutTextDiff(intent, target.currentHTML, sec);
+        if (textDiff) throw new Error("第 " + (sourceIdx + 1) + " 页排版修改改变了原文，已阻止应用。请改用定向内容修改来改文字。");
+      }
       if (sameSection(sec, target.currentHTML)) {
         console.warn("[CardMaker AI] edit page returned no visible change", { page: sourceIdx + 1 });
-        sec = await editPage(runCfg, preset, PSet, designStyle, target.currentHTML, feedback + "\n\n上一轮返回与原页面几乎相同。请优先落实样式/视觉一致性：复用参考页和全局样式里的组件 class、data-theme、视觉层级和内容块形态，让这一页产生可见的样式变化。", sourceIdx + 1, total, referenceHTML);
+        sec = await editPage(runCfg, preset, PSet, styleContext.text, target.currentHTML, feedback + "\n\n上一轮返回与原页面几乎相同。请重新执行原始修改需求，并确保返回的 <section> 与当前页不同。", sourceIdx + 1, total, referenceHTML, fullContext);
+        textDiff = layoutTextDiff(intent, target.currentHTML, sec);
+        if (textDiff) throw new Error("第 " + (sourceIdx + 1) + " 页排版修改改变了原文，已阻止应用。请改用定向内容修改来改文字。");
       }
       if (sameSection(sec, target.currentHTML)) throw new Error("第 " + (sourceIdx + 1) + " 页模型返回内容与原页面基本一致，未实际修改。");
       patch[target.viewIdx] = sec;
@@ -543,6 +803,7 @@ async function runEdit(app, cfg, feedback, intent) {
     }
     if (!Object.keys(patch).length) throw new Error("没有找到可修改的目标页面。");
     app.patchDeck({ pages: patch });
+    refreshSessionSectionsFromDeck(app);
     app.goTo(Math.max(0, viewIdxFromSourcePageIdx(changedTargets[0])));
     m.done(); m.setHtml(formatEditDone(changedTargets));
     endJob(job);
@@ -562,7 +823,7 @@ async function runStructureEdit(app, cfg, feedback) {
   const m = streamMsg();
   m.setText("正在调整页面结构…");
   try {
-    const revised = await revisePlanStructure(runCfg, S.plan, feedback, sourceIdx + 1);
+    const revised = await revisePlanStructure(runCfg, S.plan, feedback, sourceIdx + 1, fullDeckContext(app, { purpose: "structure" }));
     if (!revised.pages || !revised.pages.length) throw new Error("结构调整后没有页面。");
     revised.title = revised.title || S.plan.title;
     revised.scene = revised.scene || S.plan.scene;
@@ -618,9 +879,13 @@ async function doStyleEdit(app, feedback) {
   if (!curStyle) { addAIMsg("当前 deck 没有可改的全局 <style>。"); endJob(job); return; }
   const m = streamMsg(); m.setText("正在修改整套风格…");
   try {
-    const r = await editStyle(runCfg, preset, PSet, curStyle, feedback, deckReferenceHTML());
-    app.patchDeck({ style: r.style }); if (r.font) app.setFont(r.font);
+    const r = await editStyle(runCfg, preset, PSet, curStyle, feedback, deckReferenceHTML(), fullDeckContext(app, { purpose: "style", styleText: curStyle }));
+    app.patchDeck({ style: r.style });
+    cleanupInlineStylesCoveredByDeckStyle(app, r.style);
+    app.setHTML(app.getHTML());
+    if (r.font) app.setFont(r.font);
     if (S) S.designStyle = r.style;
+    refreshSessionSectionsFromDeck(app);
     m.done(); m.setHtml("整套风格已更新，请查看画布。");
     endJob(job);
   } catch (e) {
@@ -637,6 +902,52 @@ function exportCurrentStyle(app) {
   if (!style) { addAIMsg("当前 deck 没有可导出的样式。"); return; }
   downloadText(style, styleFileName(app), "text/css;charset=utf-8");
   addAIMsg("当前全局样式已导出。");
+}
+
+function cleanupInlineStylesCoveredByDeckStyle(app, styleText) {
+  const classProps = classStyleProps(styleText);
+  if (!classProps.size || !app.cards) return 0;
+  let changed = 0;
+  app.cards.forEach((card) => {
+    card.querySelectorAll("[style]").forEach((node) => {
+      const covered = coveredInlineProps(node, classProps);
+      if (!covered.length) return;
+      covered.forEach((prop) => node.style.removeProperty(prop));
+      if (!node.getAttribute("style")) node.removeAttribute("style");
+      changed += covered.length;
+    });
+  });
+  return changed;
+}
+
+function classStyleProps(styleText) {
+  const out = new Map();
+  String(styleText || "").replace(/\.([_a-zA-Z][\w-]*)[^{]*\{([^}]*)\}/g, (_, cls, body) => {
+    const props = out.get(cls) || new Set();
+    String(body || "").split(";").forEach((decl) => {
+      const i = decl.indexOf(":");
+      if (i > 0) props.add(decl.slice(0, i).trim().toLowerCase());
+    });
+    out.set(cls, props);
+    return "";
+  });
+  return out;
+}
+
+function coveredInlineProps(node, classProps) {
+  const out = [];
+  const classes = Array.from(node.classList || []);
+  if (!classes.length) return out;
+  Array.from(node.style || []).forEach((prop) => {
+    const lower = String(prop || "").toLowerCase();
+    if (!isDeckStyleMigratableProp(lower)) return;
+    if (classes.some((cls) => classProps.get(cls) && classProps.get(cls).has(lower))) out.push(lower);
+  });
+  return out;
+}
+
+function isDeckStyleMigratableProp(prop) {
+  return /^(font-size|line-height|font-weight|text-align|display|grid-template|grid-template-columns|grid-template-rows|grid-column|grid-row|flex|flex-basis|flex-direction|flex-wrap|align-items|align-self|justify-content|gap|row-gap|column-gap|width|min-width|max-width|height|min-height|max-height|padding|padding-top|padding-right|padding-bottom|padding-left|margin|margin-top|margin-right|margin-bottom|margin-left)$/i.test(prop);
 }
 
 // 读取用户上传的样式文件，作为当前 conversation 的样式附件。
@@ -720,6 +1031,7 @@ function slug(s) {
 function applySections(app) {
   const html = (S.designStyle || "") + "\n" + S.sections.filter(Boolean).join("\n");
   app.setHTML(html);
+  refreshSessionSectionsFromDeck(app);
   app.goTo(Math.max(0, S.sections.filter(Boolean).length - 1));
 }
 
@@ -794,7 +1106,7 @@ async function runContentPatch(app, cfg, feedback, intent) {
   const m = streamMsg();
   m.setText("正在生成定向内容补丁…");
   try {
-    const context = contentPatchContext(app, intent, feedback);
+    const context = contentPatchContext(app, intent);
     const patch = await makeContentPatch(runCfg, context, feedback);
     const result = applyContentPatch(app, patch, intent);
     if (!result.changed.length) throw new Error("补丁没有命中任何内容或组件。请明确页码、组件名或要替换的原文字。");
@@ -811,11 +1123,9 @@ async function runContentPatch(app, cfg, feedback, intent) {
   }
 }
 
-function contentPatchContext(app, intent, feedback) {
+function contentPatchContext(app, intent) {
   const currentSourceIdx = sourcePageIdxFromViewIdx(app.index);
-  const targetIdxs = mentionsAllPages(feedback)
-    ? allPatchableSourceIdxs(app)
-    : intentTargetSourceIdxs(intent, currentSourceIdx);
+  const targetIdxs = intentTargetSourceIdxs(intent, currentSourceIdx);
   const pages = resolveEditTargets(app, targetIdxs).map((target) => ({
     page: target.sourceIdx + 1,
     current: target.sourceIdx === currentSourceIdx,
@@ -823,27 +1133,13 @@ function contentPatchContext(app, intent, feedback) {
     text: compactText(htmlText(target.currentHTML)).slice(0, 1600),
   }));
   return {
+    full_context: fullDeckContext(app, { purpose: "content_patch" }),
     current_page: currentSourceIdx + 1,
     total_pages: editTotalPages(app),
-    all_pages_requested: mentionsAllPages(feedback),
     target_pages: targetIdxs.map((i) => i + 1),
     selector_hints: selectorHints(),
     pages,
   };
-}
-
-function mentionsAllPages(text) {
-  return /(全套|全部|所有|每页|每一页|批量|统一替换|全部替换|全局替换)/.test(String(text || ""));
-}
-
-function allPatchableSourceIdxs(app) {
-  const total = editTotalPages(app);
-  const out = [];
-  for (let i = 0; i < total; i++) {
-    const viewIdx = viewIdxFromSourcePageIdx(i);
-    if ((S && S.sections && S.sections[i]) || (viewIdx >= 0 && app.cards[viewIdx])) out.push(i);
-  }
-  return out.length ? out : [sourcePageIdxFromViewIdx(app.index)];
 }
 
 function selectorHints() {
@@ -881,7 +1177,7 @@ function applyContentPatch(app, patch, intent) {
       const target = getPatchTarget(app, sourceIdx, touched);
       if (!target) return;
       const before = target.card.outerHTML;
-      count += applyPatchOp(target.card, op);
+      count += applyPatchOp(target, op);
       if (target.card.outerHTML !== before) {
         pages[target.viewIdx] = target.card.outerHTML;
         if (!changed.some((p) => p.sourceIdx === sourceIdx)) changed.push({ sourceIdx, viewIdx: target.viewIdx });
@@ -910,12 +1206,14 @@ function getPatchTarget(app, sourceIdx, touched) {
   const doc = new DOMParser().parseFromString(currentHTML, "text/html");
   const card = doc.body.querySelector("section.card");
   if (!card) return null;
-  const target = { sourceIdx, viewIdx, card };
+  const liveCard = viewIdx >= 0 ? app.cards[viewIdx] : app.cards[sourceIdx];
+  const target = { sourceIdx, viewIdx, card, liveCard };
   touched.set(sourceIdx, target);
   return target;
 }
 
-function applyPatchOp(card, op) {
+function applyPatchOp(target, op) {
+  const card = target.card;
   const nodes = op.selector ? Array.from(card.querySelectorAll(op.selector)) : [card];
   let changed = 0;
   nodes.forEach((node) => {
@@ -961,6 +1259,12 @@ function sanitizePatchHTML(html) {
 function setSafeAttr(node, name, value) {
   name = String(name || "").trim();
   if (!name || /^on/i.test(name) || /^(src|href)$/i.test(name)) return;
+  if (name.toLowerCase() === "style") {
+    const kept = sanitizePatchStyle(value);
+    if (kept) node.setAttribute("style", kept);
+    else node.removeAttribute("style");
+    return;
+  }
   node.setAttribute(name, String(value || ""));
 }
 
@@ -971,14 +1275,29 @@ function classListApply(node, classText, add) {
   });
 }
 
+// 合并定向补丁里的 inline style，只允许布局和文字排版密度属性落到 DOM。
 function mergeInlineStyle(node, styleText) {
-  String(styleText || "").split(";").map((s) => s.trim()).filter(Boolean).forEach((decl) => {
+  sanitizePatchStyle(styleText).split(";").map((s) => s.trim()).filter(Boolean).forEach((decl) => {
     const i = decl.indexOf(":");
     if (i <= 0) return;
     const prop = decl.slice(0, i).trim();
     const value = decl.slice(i + 1).trim();
     if (prop) node.style.setProperty(prop, value);
   });
+}
+
+// 过滤补丁 style 声明，保持和 pipeline 的单页 HTML 清理规则一致。
+function sanitizePatchStyle(styleText) {
+  return String(styleText || "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((decl) => {
+      const i = decl.indexOf(":");
+      if (i <= 0) return false;
+      return /^(font-size|line-height|font-weight|text-align|display|grid-template|grid-template-columns|grid-template-rows|grid-column|grid-row|flex|flex-basis|flex-direction|flex-wrap|align-items|align-self|justify-content|gap|row-gap|column-gap|width|min-width|max-width|height|min-height|max-height|padding|padding-top|padding-right|padding-bottom|padding-left|margin|margin-top|margin-right|margin-bottom|margin-left)$/i.test(decl.slice(0, i).trim());
+    })
+    .join("; ");
 }
 
 function syncPatchedSections(pages) {
@@ -990,13 +1309,40 @@ function syncPatchedSections(pages) {
   });
 }
 
-function shouldPreferContentPatch(text) {
-  return /(替换|换掉|删掉|删除|去掉|改成|改为|文案|文字|内容|header|footer|页眉|页脚|标题|副标题|组件|class|style|样式属性|右上角|左上角|右下角|左下角)/i.test(String(text || "")) &&
-    !/(整体|整套|全局|统一风格|重新设计|重做配色|换主题|视觉系统)/.test(String(text || ""));
-}
-
 function sameSection(a, b) {
   return sectionFingerprint(a) === sectionFingerprint(b);
+}
+
+function layoutTextDiff(intent, beforeHTML, afterHTML) {
+  if (!mustPreserveVisibleText(intent)) return null;
+  const before = visibleTextSignature(beforeHTML);
+  const after = visibleTextSignature(afterHTML);
+  if (before.signature === after.signature) return null;
+  return {
+    before: before.text.slice(0, 600),
+    after: after.text.slice(0, 600),
+  };
+}
+
+function mustPreserveVisibleText(intent) {
+  return !!intent && !intent.allow_content_change && (intent.intent === "edit_page" || intent.intent === "edit_pages");
+}
+
+function originalVisibleText(html) {
+  return visibleTextSignature(html).text;
+}
+
+function visibleTextSignature(html) {
+  if (typeof DOMParser === "undefined") return { text: compactText(html), signature: compactText(html) };
+  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+  doc.querySelectorAll("style,script,link,iframe,object,embed,.cm-page").forEach((node) => node.remove());
+  const text = compactText(doc.body.textContent || "");
+  return {
+    text,
+    signature: text
+      .replace(/\b\d{1,2}\s*\/\s*\d{1,2}\b/g, "")
+      .replace(/\s+/g, ""),
+  };
 }
 
 function sectionFingerprint(html) {
@@ -1041,6 +1387,21 @@ function ensureSessionFromDeck(app, cfg) {
     sampleSection: "",
   };
   return true;
+}
+
+function refreshSessionSectionsFromDeck(app) {
+  if (!S || !S.sections) return;
+  const parsed = parseDeckHTML(app.getHTML());
+  if (!parsed.sections.length) return;
+  const generated = [];
+  S.sections.forEach((section, i) => {
+    if (section) generated.push(i);
+  });
+  parsed.sections.forEach((section, viewIdx) => {
+    const sourceIdx = generated[viewIdx] != null ? generated[viewIdx] : viewIdx;
+    S.sections[sourceIdx] = section;
+  });
+  if (parsed.style) S.designStyle = parsed.style;
 }
 
 function syncSessionFromParsedDeck(parsed) {
@@ -1217,7 +1578,7 @@ async function regeneratePage(app, sourceIdx) {
     m.setText("正在重新生成第 " + (sourceIdx + 1) + " / " + total + " 页…");
     const prev = findPrevSection(sourceIdx);
     const sec = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle,
-      S.plan.pages[sourceIdx], prev, sourceIdx + 1, total, confirmedLayoutReference(sourceIdx));
+      S.plan.pages[sourceIdx], prev, sourceIdx + 1, total, confirmedLayoutReference(sourceIdx), fullDeckContext(app, { purpose: "render", styleText: S.designStyle }));
     S.sections[sourceIdx] = sec;
     applySections(app);
     app.goTo(Math.max(0, viewIdxFromSourcePageIdx(sourceIdx)));
@@ -1238,7 +1599,59 @@ function extractStyleFromDeck(app) {
 
 // 获取可被导出或继续编辑的全局样式；没有显式 <style> 时，从当前渲染效果生成一份快照。
 function currentDesignStyle(app) {
-  return (S && S.designStyle) || extractStyleFromDeck(app) || styleSnapshotFromDeck(app);
+  return extractStyleFromDeck(app) || (S && S.designStyle) || styleSnapshotFromDeck(app);
+}
+
+function editStyleContext(app, style) {
+  const deckStyle = style || "";
+  const classes = Array.from(new Set(
+    classNamesFromText(deckStyle)
+      .concat(builtinComponentClasses())
+      .concat(classesFromCurrentDeck(app))
+  )).sort();
+  const builtin = "<!-- CardMaker builtin public classes available from cardmaker.css -->\n" +
+    classes.map((cls) => "." + cls).join(" ");
+  return {
+    source: deckStyle.indexOf("CardMaker style snapshot") >= 0 ? "snapshot+builtin" : "deck-style+builtin",
+    text: [deckStyle || "<style></style>", builtin].join("\n\n"),
+    classes,
+  };
+}
+
+function classNamesFromText(text) {
+  const out = [];
+  String(text || "").replace(/\.([_a-zA-Z][\w-]*)/g, (_, cls) => {
+    out.push(cls);
+    return "";
+  });
+  return out;
+}
+
+function classesFromCurrentDeck(app) {
+  const out = [];
+  (app.cards || []).forEach((card) => {
+    card.querySelectorAll("[class]").forEach((node) => {
+      String(node.getAttribute("class") || "").split(/\s+/).filter(Boolean).forEach((cls) => out.push(cls));
+    });
+  });
+  return out;
+}
+
+function builtinComponentClasses() {
+  return [
+    "card", "cm-header", "cm-main", "cm-footer", "cm-page",
+    "cm-row", "cm-col", "cm-grid", "cm-grid-3", "cm-split", "cm-split-13", "cm-split-31",
+    "cm-between", "cm-items-center", "cm-center", "cm-middle", "cm-top", "cm-fill", "cm-text-center",
+    "cm-mt", "cm-mt-lg", "cm-mb", "cm-gap-lg", "cm-gap-sm", "cm-gap-xs", "cm-pad-sm", "cm-pad-xs",
+    "cm-cell", "cm-outline", "cm-flow", "cm-feature-row", "cm-feature-label", "cm-feature-body",
+    "cm-callout", "cm-band", "cm-mosaic", "cm-bento", "cm-span-2", "cm-compare", "cm-compare-col",
+    "cm-process", "cm-step", "cm-step-num", "cm-insight", "cm-insight-mark", "cm-pullquote", "cm-metric-row", "cm-mini-card",
+    "cm-stat", "cm-stat-num", "cm-stat-label",
+    "cm-checklist", "cm-chip", "cm-tag", "cm-ghost", "cm-kicker", "cm-title", "cm-subtitle",
+    "cm-titlebar", "cm-lead", "cm-display", "cm-muted", "cm-accent", "cm-sm",
+    "cm-text-xs", "cm-text-sm", "cm-text-md", "cm-text-lg", "cm-leading-tight", "cm-leading-normal", "cm-leading-loose", "cm-compact", "cm-dense",
+    "cm-bar", "cm-divider",
+  ];
 }
 
 // 从当前卡片的计算样式生成可复用的 deck 级 <style>，覆盖内置样式但不依赖单页私有样式。
