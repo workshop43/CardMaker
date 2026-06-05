@@ -357,22 +357,49 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: nowrap;
   gap: var(--cm-gap);
   margin-top: auto;        /* 常规流下钉到底部：无论有没有 .cm-main，页脚都沉底、不浮在中间 */
   padding-top: var(--cm-gap);
   font-size: var(--cm-text-sm);
   color: var(--cm-muted);
   border-top: 1px solid var(--cm-line);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .cm-header {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: nowrap;
   gap: var(--cm-gap);
   margin-bottom: var(--cm-gap);
   font-size: var(--cm-text-sm);
   color: var(--cm-muted);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* 页眉/页脚是结构性 chrome，导出时必须保持单行稳定；空间不足时截断，不挤压正文布局。
+   这里同时覆盖直接文本节点和子元素，抵消 html-to-image 导出时轻微字体度量漂移导致的意外折行。 */
+.cm-header > *,
+.cm-footer > * {
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cm-header > :first-child,
+.cm-footer > :first-child {
+  flex: 1 1 auto;
+}
+.cm-header > :not(:first-child),
+.cm-footer > :not(:first-child) {
+  flex: 0 0 auto;
+  max-width: 45%;
 }
 /* 主内容区：撑满页眉页脚之间。正文页默认从上往下排，避免标题被当成封面大标题居中锁定。 */
 .cm-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: flex-start; gap: var(--cm-gap); }
@@ -755,6 +782,21 @@
 
 /* 导出时临时隐藏运行时角标 */
 .cm-exporting .cm-page { display: none; }
+.cm-export-sandbox {
+  position: fixed !important;
+  inset: auto !important;
+  left: -100000px !important;
+  top: 0 !important;
+  display: block !important;
+  overflow: visible !important;
+  background: transparent !important;
+  z-index: -1 !important;
+  pointer-events: none !important;
+}
+.cm-export-sandbox .cm-header,
+.cm-export-sandbox .cm-footer {
+  letter-spacing: 0 !important;
+}
 
 /* ---------- 10. 应用内确认弹窗 ---------- */
 .cm-confirm-mask {

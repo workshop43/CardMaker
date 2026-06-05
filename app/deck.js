@@ -70,6 +70,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     htmlToImage: "https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js",
     jszip: "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
   };
+  var EXPORT_TEXT_SCALE = 0.98;
 
   // CodeMirror 5（编辑器，打开编辑面板时才懒加载；失败则退回 textarea）
   var CM_VER = "5.65.16";
@@ -731,10 +732,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
 
   CardMaker.prototype._snap = function (card) {
     var p = PRESETS[this.preset];
-    this.app.classList.add("cm-exporting");
-    // 临时显示该卡片（导出非当前页时）
-    var wasActive = card.classList.contains("is-active");
-    card.classList.add("is-active");
+    var snapshot = this._createExportSnapshot(card, p);
     var opts = {
       width: p.w,
       height: p.h,
@@ -743,11 +741,67 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       style: { opacity: "1", visibility: "visible", position: "relative", transform: "none" },
     };
     var self = this;
-    return global.htmlToImage.toPng(card, opts).finally(function () {
-      if (!wasActive) card.classList.remove("is-active");
+    this.app.classList.add("cm-exporting");
+    return new Promise(function (resolve) {
+      requestAnimationFrame(function () { resolve(); });
+    }).then(function () {
+      return global.htmlToImage.toPng(snapshot.card, opts);
+    }).finally(function () {
+      snapshot.root.remove();
       self.app.classList.remove("cm-exporting");
     });
   };
+
+  // 构造离屏导出快照：给 html-to-image 一个固定尺寸、已激活、无舞台缩放干扰的渲染目标。
+  // 预览与导出使用同一套 deck 级样式；页眉页脚的字体度量漂移由 CSS 的单行/截断规则兜底。
+  CardMaker.prototype._createExportSnapshot = function (card, preset) {
+    var root = el("div", "cm-app cm-export-sandbox cm-exporting");
+    root.setAttribute("data-preset", this.preset);
+    var cards = el("div", "cm-cards");
+    var clone = card.cloneNode(true);
+
+    Array.prototype.forEach.call(this.cardsWrap.querySelectorAll("style"), function (style) {
+      cards.appendChild(style.cloneNode(true));
+    });
+
+    clone.classList.add("is-active");
+    clone.style.width = preset.w + "px";
+    clone.style.height = preset.h + "px";
+    clone.style.opacity = "1";
+    clone.style.visibility = "visible";
+    clone.style.position = "relative";
+    clone.style.transform = "none";
+    applyExportTextScale(card, clone, EXPORT_TEXT_SCALE);
+    cards.style.width = preset.w + "px";
+    cards.style.height = preset.h + "px";
+    cards.appendChild(clone);
+    root.style.width = preset.w + "px";
+    root.style.height = preset.h + "px";
+    root.appendChild(cards);
+    document.body.appendChild(root);
+    return { root: root, card: clone };
+  };
+
+  // 导出专用字体安全余量：html-to-image 的 foreignObject 渲染会有轻微字体度量漂移，
+  // 把实际 computed 字号/行高写到克隆节点并缩小少量，避免临界文本在导出 PNG 里突然折行。
+  function applyExportTextScale(source, clone, scale) {
+    var srcNodes = [source].concat(Array.prototype.slice.call(source.querySelectorAll("*")));
+    var cloneNodes = [clone].concat(Array.prototype.slice.call(clone.querySelectorAll("*")));
+    srcNodes.forEach(function (src, i) {
+      var dst = cloneNodes[i];
+      if (!dst || /^(STYLE|SCRIPT|IMG|SVG|PATH)$/i.test(dst.tagName || "")) return;
+      var cs = global.getComputedStyle(src);
+      var font = parseFloat(cs.fontSize);
+      if (isFinite(font) && font > 0) dst.style.fontSize = round(font * scale) + "px";
+      var line = parseFloat(cs.lineHeight);
+      if (isFinite(line) && line > 0) dst.style.lineHeight = round(line * scale) + "px";
+    });
+  }
+
+  // 保留 0.1px 精度，避免导出缩放后的文字尺寸被整数取整放大误差。
+  function round(value) {
+    return Math.round(value * 10) / 10;
+  }
 
   function download(dataUrl, name) {
     var a = document.createElement("a");
