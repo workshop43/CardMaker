@@ -22,6 +22,14 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     ppt: { w: 1280, h: 720, label: "PPT 16:9" },
     story: { w: 1080, h: 1920, label: "竖屏 9:16" },
   };
+  var BUILTIN_EXAMPLE_TITLES = {
+    "3个写作习惯": true,
+    "21天习惯": true,
+    "灵感收纳术": true,
+    "FAB卖点拆解法": true,
+    "CardMaker 使用教程": true,
+    "我们在找你": true,
+  };
 
   // 各比例的内置示例已拆到 examples/<preset>.html（运行时不再内嵌示例内容）。
   // 切比例时按需 fetch 注入；示例路径相对本模块（app/deck.js）解析，指向 ../examples/。
@@ -31,11 +39,30 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     try { return new URL("../examples/" + preset + ".html", SELF_SRC).href; }
     catch (e) { return "../examples/" + preset + ".html"; }
   }
-  // 从一段完整 deck 文档里抽出 [data-cardmaker] 容器的内部 HTML（卡片 + 可选 deck 级 <style>）
-  function extractDeck(html) {
+  // 从一段完整 deck 文档里抽出 [data-cardmaker] 容器配置与内部 HTML（卡片 + 可选 deck 级 <style>）。
+  function extractDeckInfo(html) {
     var doc = new DOMParser().parseFromString(html, "text/html");
     var deck = doc.querySelector("[data-cardmaker]");
-    return deck ? deck.innerHTML : "";
+    if (!deck) {
+      var app = doc.querySelector(".cm-app");
+      var cards = doc.querySelector(".cm-cards");
+      if (cards) {
+        deck = cards;
+        if (app && app.getAttribute("data-preset")) deck.setAttribute("data-preset", app.getAttribute("data-preset"));
+      }
+    }
+    return deck ? {
+      html: deck.innerHTML,
+      preset: deck.getAttribute("data-preset") || "",
+      title: deck.getAttribute("data-title") || "",
+      font: deck.getAttribute("data-font") || "",
+    } : null;
+  }
+
+  // 兼容旧调用：只取 deck 内部 HTML。
+  function extractDeck(html) {
+    var info = extractDeckInfo(html);
+    return info ? info.html : "";
   }
 
   // 出图依赖按需从 CDN 懒加载，零构建。
@@ -168,11 +195,15 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     // 只读浏览模式（导出的成品 HTML 用）：只翻页，不渲染工具栏/编辑器，不读写本地存档
     this.view = (opts.mode || this.source.getAttribute("data-mode")) === "view";
     this.store = "cardmaker:" + location.pathname; // 自动存档键（按页面区分）
+    this.isBuiltinExample = /\/examples\//.test(location.pathname); // 内置示例固定展示源码，避免旧存档污染字体/样式
+    this.activeExamplePreset = ""; // header 载入的内置样例不写存档，避免样例文件更新后仍恢复旧内容
+    this.pendingExamplePreset = "";
     this.index = 0;
     this.cards = [];
     this._build();
-    if (!this.view) this._restore(); // 浏览模式用文件里的内容，不恢复本地存档
+    if (!this.view && !this.isBuiltinExample) this._restore(); // 浏览模式和内置示例都用文件里的内容，不恢复本地存档
     this.refresh();
+    if (this.pendingExamplePreset) this.loadExample(this.pendingExamplePreset);
 
     var self = this;
     window.addEventListener("resize", function () { self._fit(); });
@@ -205,12 +236,19 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.presetSel.onchange = function () { self.loadExample(self.presetSel.value); };
     this.btnEdit = el("button", "cm-btn", "编辑");
     this.btnPresent = el("button", "cm-btn", "放映");
-    this.btnSave = el("button", "cm-btn", "保存 HTML");
-    this.btnExport = el("button", "cm-btn", "导出本页");
-    this.btnExportAll = el("button", "cm-btn cm-primary", "导出全部");
+    this.btnImport = el("button", "cm-btn", "上传 HTML");
+    this.btnSave = el("button", "cm-btn", "导出 HTML");
+    this.btnExport = el("button", "cm-btn", "当前页导出 PNG");
+    this.btnExportAll = el("button", "cm-btn cm-primary", "打包导出 PNG");
+    this.fileImport = el("input");
+    this.fileImport.type = "file";
+    this.fileImport.accept = ".html,.htm,text/html";
+    this.fileImport.className = "cm-file-input";
     if (!this.view) { // 浏览模式不要这些编辑/导出按钮
       bar.appendChild(this.btnEdit);
       bar.appendChild(this.btnPresent);
+      bar.appendChild(this.btnImport);
+      bar.appendChild(this.fileImport);
       bar.appendChild(this.btnSave);
       bar.appendChild(this.btnExport);
       bar.appendChild(this.btnExportAll);
@@ -266,6 +304,8 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.btnExport.onclick = function () { self.exportCurrent(); };
     this.btnExportAll.onclick = function () { self.exportAll(); };
     this.btnEdit.onclick = function () { self.toggleEditor(); };
+    this.btnImport.onclick = function () { self.fileImport.click(); };
+    this.fileImport.onchange = function () { self._handleImportFile(self.fileImport.files && self.fileImport.files[0]); };
     this.btnSave.onclick = function () { self.downloadHTML(); };
     this.textarea.addEventListener("input", function () { self._applyEditor(); });
   };
@@ -315,6 +355,8 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   // ---------- 存档：自动存到 localStorage，刷新自动恢复 ----------
   CardMaker.prototype._save = function () {
     if (this.view) return; // 浏览模式不写本地存档
+    if (this.isBuiltinExample) return; // 内置示例不写本地存档，确保每次打开都是仓库里的基准样例
+    if (this.activeExamplePreset) return; // header 载入的样例也不写存档，避免旧样例缓存覆盖文件更新
     var self = this;
     clearTimeout(this._saveT);
     this._saveT = setTimeout(function () {
@@ -335,6 +377,11 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var data;
     try { data = JSON.parse(raw); } catch (e) { return; }
     if (!data || !data.html || data.html.indexOf("<section") === -1) return;
+    if (data.examplePreset || BUILTIN_EXAMPLE_TITLES[data.title]) {
+      try { localStorage.removeItem(this.store); } catch (e) { /* ignore */ }
+      this.pendingExamplePreset = data.examplePreset || data.preset || "";
+      return;
+    }
     if (data.preset && PRESETS[data.preset]) {
       this.preset = data.preset;
       this.app.setAttribute("data-preset", data.preset);
@@ -366,6 +413,45 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     cancel.onclick = close;
     mask.onclick = function (e) { if (e.target === mask) close(); };
     ok.onclick = function () { close(); onYes(); };
+  };
+
+  // 读取用户选择的 HTML 文件，并在读取完成后导入为当前可编辑 deck。
+  CardMaker.prototype._handleImportFile = function (file) {
+    if (!file) return;
+    var self = this;
+    var reader = new FileReader();
+    reader.onload = function () {
+      self.fileImport.value = "";
+      self.importHTML(String(reader.result || ""), file.name);
+    };
+    reader.onerror = function () {
+      self.fileImport.value = "";
+      self._toast("读取文件失败");
+    };
+    reader.readAsText(file);
+  };
+
+  // 把完整 HTML 文档或 deck 片段导入当前运行时，保留原 deck 的比例、标题、字体和卡片源码。
+  CardMaker.prototype.importHTML = function (html, fallbackTitle) {
+    var info = extractDeckInfo(html);
+    var tmp = el("div");
+    if (info && info.html) tmp.innerHTML = info.html;
+    if (!info || !tmp.querySelector(".card")) {
+      this._toast("未找到 CardMaker 卡片");
+      return false;
+    }
+    var title = info.title || String(fallbackTitle || "").replace(/\.(html?|HTML?)$/, "") || this.title;
+    this.activeExamplePreset = "";
+    this.loadingExample = false;
+    if (info.preset && PRESETS[info.preset]) this.setPreset(info.preset);
+    this.title = title;
+    this.font = info.font || "";
+    this.setHTML(info.html);
+    this.goTo(0);
+    if (!this.app.classList.contains("is-editing")) this.toggleEditor();
+    else this._syncEditor();
+    this._toast("已打开 " + title);
+    return true;
   };
 
   // 保存为自包含 HTML 文件：同源的 cardmaker.css/js 内联进去，双击即可打开、再编辑、再出图
@@ -410,16 +496,21 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     }).catch(function (e) { self._toast("保存失败：" + (e && e.message || e)); });
   };
 
-  // 应用字体：每卡按 data-font（优先）或 deck 级默认，懒加载并设到 --cm-font-sans
+  // 应用字体：deck 级 data-font 是整套字体契约；没有 deck 字体时才允许单卡 data-font。
+  // 同时给卡片打 data-cm-font-lock，让旧局部 font-family 或晚加载 web 字体不能反向覆盖。
   CardMaker.prototype._applyFonts = function () {
     var self = this;
     this.cards.forEach(function (c) {
-      var key = c.getAttribute("data-font") || self.font;
+      var key = self.font || c.getAttribute("data-font") || "";
       if (key && FONTS[key]) {
         ensureFont(key);
-        c.style.setProperty("--cm-font-sans", FONTS[key].family);
+        c.setAttribute("data-cm-font-lock", key);
+        c.style.setProperty("--cm-font-sans", FONTS[key].family, "important");
+        c.style.setProperty("--cm-font-serif", FONTS[key].family, "important");
       } else {
+        c.removeAttribute("data-cm-font-lock");
         c.style.removeProperty("--cm-font-sans");
+        c.style.removeProperty("--cm-font-serif");
       }
     });
   };
@@ -450,6 +541,13 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       inner.appendChild(c);
     });
     card.classList.remove("is-active");
+    var fontKey = card.getAttribute("data-font") || "";
+    if (fontKey && FONTS[fontKey]) {
+      ensureFont(fontKey);
+      card.setAttribute("data-cm-font-lock", fontKey);
+      card.style.setProperty("--cm-font-sans", FONTS[fontKey].family, "important");
+      card.style.setProperty("--cm-font-serif", FONTS[fontKey].family, "important");
+    }
     card.style.width = P.w + "px";
     card.style.height = P.h + "px";
     inner.appendChild(card);
@@ -547,6 +645,9 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var pg = k.querySelector(".cm-page");
     if (pg) pg.remove();
     k.classList.remove("is-active");
+    k.removeAttribute("data-cm-font-lock");
+    k.style.removeProperty("--cm-font-sans");
+    k.style.removeProperty("--cm-font-serif");
     return k.outerHTML;
   };
   CardMaker.prototype._currentCardHTML = function () {
@@ -722,6 +823,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
 
   // 用一段 HTML 替换全部卡片
   CardMaker.prototype.setHTML = function (html) {
+    if (!this.loadingExample) this.activeExamplePreset = "";
     this.cardsWrap.innerHTML = html;
     this.index = 0;
     this.refresh();
@@ -750,6 +852,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
 
   // 用一段 HTML 替换指定页（用于单页重绘）；i 默认当前页
   CardMaker.prototype.replaceCardAt = function (i, html) {
+    this.activeExamplePreset = "";
     if (i == null) i = this.index;
     var card = this.cards[i];
     if (!card) return;
@@ -766,6 +869,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   // 避免整套重建——既快又不会动到没让改的页）。patch = { style?:"<style>…</style>", pages?:{ 索引: "<section>…</section>" } }
   CardMaker.prototype.patchDeck = function (patch) {
     if (!patch) return false;
+    this.activeExamplePreset = "";
     var self = this, changed = false;
     if (patch.style) {
       var t0 = el("div"); t0.innerHTML = patch.style;
@@ -807,15 +911,23 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     if (!PRESETS[preset]) return;
     this.setPreset(preset);
     var self = this, url = demoURL(preset);
+    this.activeExamplePreset = preset;
+    try { localStorage.removeItem(this.store); } catch (e) { /* ignore */ }
     fetch(url)
       .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
       .then(function (html) {
-        var inner = extractDeck(html);
-        if (!inner) throw new Error("示例里没有 [data-cardmaker] 容器");
-        self.setHTML(inner);
+        var info = extractDeckInfo(html);
+        if (!info || !info.html) throw new Error("示例里没有 [data-cardmaker] 容器");
+        self.title = info.title || self.title;
+        self.font = info.font || "";
+        self.loadingExample = true;
+        self.setHTML(info.html);
+        self.loadingExample = false;
+        self.activeExamplePreset = preset;
         self.goTo(0);
       })
       .catch(function (e) {
+        self.loadingExample = false;
         console.warn("[CardMaker] 载入示例失败（" + url + "）：" + e.message +
           "；已仅切换画布比例。file:// 下请改用本地服务（http）打开。");
       });

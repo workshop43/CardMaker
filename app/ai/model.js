@@ -54,6 +54,7 @@ export function resolveCfg() {
 export function callModel(cfg, sys, user, onDelta, onThink) {
   return fetch(cfg.base.replace(/\/$/, "") + "/chat/completions", {
     method: "POST",
+    signal: cfg.signal,
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + cfg.key },
     body: JSON.stringify({
       model: cfg.model,

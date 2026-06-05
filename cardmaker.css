@@ -183,6 +183,7 @@
 .cm-btn.cm-primary { background: var(--cm-accent); border-color: transparent; color: #fff; font-weight: 600; }
 .cm-btn.cm-primary:hover { filter: brightness(1.08); }
 .cm-btn[disabled] { opacity: 0.4; cursor: default; pointer-events: none; }
+.cm-file-input { display: none; }
 .cm-select {
   appearance: none;
   background: rgba(255, 255, 255, 0.06);
@@ -266,6 +267,12 @@
   text-autospace: normal;
 }
 .card * { box-sizing: border-box; }
+/* data-font 是用户/AI 明确选择的字体契约，优先级高于主题或旧 deck 里的局部 font-family。
+   这样异步加载过的旧 web 字体不会在加载完成后反向覆盖当前 deck 的字体。 */
+.card[data-cm-font-lock],
+.card[data-cm-font-lock] *:not(.cm-quote-mark) {
+  font-family: var(--cm-font-sans) !important;
+}
 /* 装饰层用 z-index:-1 垫底（配合 .card 的 isolation），内容天然浮于其上。 */
 /* 标题：平衡换行 + 中文按禁则换行（line-break:strict）。
    注意：中文标题不能用 word-break:keep-all——中文无空格会被当成一个整词而完全不换行、溢出被裁。 */
@@ -355,11 +362,21 @@
   font-size: var(--cm-text-sm);
   color: var(--cm-muted);
 }
-/* 主内容区：撑满页眉页脚之间、默认居中。内容多则占满、少则居中，绝不与页眉页脚重叠。 */
-.cm-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: var(--cm-gap); }
+/* 主内容区：撑满页眉页脚之间。正文页默认从上往下排，避免标题被当成封面大标题居中锁定。 */
+.cm-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: flex-start; gap: var(--cm-gap); }
 /* 居中页（封面/金句）内容稀疏：页眉页脚钉在卡片上下边，主标题在中间居中 */
+.card.cm-middle .cm-main { justify-content: center; }
 .card.cm-middle .cm-header { position: absolute; left: var(--cm-pad); right: var(--cm-pad); top: var(--cm-pad); margin: 0; z-index: 2; }
 .card.cm-middle .cm-footer { position: absolute; left: var(--cm-pad); right: var(--cm-pad); bottom: var(--cm-pad); margin: 0; z-index: 2; }
+/* 正文/数据页永远走正文流；即使误带 cm-middle 或全局样式误写居中，也不能套封面标题位置。 */
+.card[data-role="content"] .cm-main,
+.card[data-role="data"] .cm-main { justify-content: flex-start !important; }
+.card[data-role="content"].cm-middle,
+.card[data-role="data"].cm-middle { justify-content: flex-start !important; }
+.card[data-role="content"].cm-middle .cm-header,
+.card[data-role="data"].cm-middle .cm-header,
+.card[data-role="content"].cm-middle .cm-footer,
+.card[data-role="data"].cm-middle .cm-footer { position: static !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; }
 /* PPT 演示稿：页脚做小做轻（运行信息，不抢正文）；页眉做成左对齐标题栏 */
 .cm-app[data-preset="ppt"] .cm-footer {
   font-size: 14px;         /* 角注级小字 */

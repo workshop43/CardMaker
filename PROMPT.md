@@ -21,8 +21,8 @@
   <div data-cardmaker data-preset="ppt" data-title="标题">
     <!-- 可选：一个 <style> 作为你的设计系统（自定义 class / 布局 / 配色变量） -->
     <style> .lead{font-size:.9em;color:var(--cm-muted)} /* … */ </style>
-    <section class="card" data-theme="ocean">…第 1 页（内部布局随你设计）…</section>
-    <section class="card" data-theme="ocean">…第 2 页…</section>
+    <section class="card" data-theme="THEME_KEY">…PAGE_1_CONTENT…</section>
+    <section class="card" data-theme="THEME_KEY">…PAGE_2_CONTENT…</section>
   </div>
   <script type="module" src="app/main.js"></script>
 </body>
@@ -77,9 +77,9 @@
 
 ```html
 <section class="card">
-  <div class="cm-header">系列名 · 本页标题</div>
-  …主内容（自己给页眉页脚留出上下空间，正文不会自动避让）…
-  <div class="cm-footer"><span>@账号</span><span>02 / 08</span></div>
+  <div class="cm-header">SERIES_LABEL · PAGE_TITLE</div>
+  …MAIN_CONTENT（自己给页眉页脚留出上下空间，正文不会自动避让）…
+  <div class="cm-footer"><span>AUTHOR_OR_SOURCE</span><span>PAGE_NUMBER</span></div>
 </section>
 ```
 
@@ -104,7 +104,7 @@
 
 想要专属配色，**优先直接选合适的 `data-theme`**，通常只需再改强调色：
 ```html
-<section class="card" data-theme="ocean" style="--cm-accent:#ff5a5f">
+<section class="card" data-theme="THEME_KEY" style="--cm-accent:ACCENT_COLOR">
 ```
 可改：`--cm-accent`(强调) `--cm-fg`(文字) `--cm-muted`(弱化) `--cm-card-bg`(背景)。
 > ⚠ **切忌只改 `--cm-card-bg` 把背景改深、却不改 `--cm-fg`**——会「深底深字、看不见」。要深背景就用深色 `data-theme`，或自定义背景时同时设 `--cm-fg`（深底配浅字、浅底配深字）。
@@ -127,49 +127,49 @@
 **布局类**：`cm-middle` 垂直居中 · `cm-top` 顶对齐 · `cm-text-center` · `cm-row` 横排 · `cm-col` 竖排 · `cm-items-center` · `cm-between` · `cm-fill` 占满剩余 · `cm-mt`/`cm-mt-lg` 间距。
 **装饰层**（自动垫在内容之下，不挡字）：`<div class="cm-deco cm-deco-glow"></div>`，可选 `cm-deco-blob`/`cm-deco-grid`/`cm-deco-dots`/`cm-deco-ring`。
 
-## 版式原型（片段，照着改内容）
+## 版式原型（抽象模板，替换所有占位内容）
 
 **封面页**
 ```html
-<section class="card cm-middle" data-theme="ocean">
+<section class="card cm-middle" data-theme="THEME_KEY">
   <div class="cm-deco cm-deco-glow"></div>
-  <div class="cm-kicker">高效工作</div>
-  <h1 class="cm-display">3 个<br>时间管理技巧</h1>
-  <p class="cm-lead cm-mt">把时间花在刀刃上</p>
-  <div class="cm-footer"><span>@CardMaker</span><span>← 滑动 →</span></div>
+  <div class="cm-kicker">KICKER_TEXT</div>
+  <h1 class="cm-display">COVER_TITLE</h1>
+  <p class="cm-lead cm-mt">COVER_SUBTITLE</p>
+  <div class="cm-footer"><span>AUTHOR_OR_SOURCE</span><span>FOOTER_HINT</span></div>
 </section>
 ```
 
 **大序号内容页**
 ```html
-<section class="card" data-theme="ocean">
-  <div class="cm-watermark">1</div>
-  <div class="cm-row cm-items-center" style="gap:32px"><div class="cm-num">01</div><h2 style="margin:0">要事第一</h2></div>
+<section class="card" data-theme="THEME_KEY">
+  <div class="cm-watermark">SECTION_INDEX</div>
+  <div class="cm-row cm-items-center" style="gap:32px"><div class="cm-num">DISPLAY_INDEX</div><h2 style="margin:0">PAGE_TITLE</h2></div>
   <div class="cm-divider"></div>
-  <p>每天先做<strong>最重要的一件事</strong>，再处理琐碎。</p>
-  <p class="cm-muted">忙不等于高效，方向比速度重要。</p>
-  <div class="cm-footer"><span>@CardMaker</span><span>时间管理</span></div>
+  <p>PRIMARY_STATEMENT <strong>KEY_PHRASE</strong> SUPPORTING_TEXT</p>
+  <p class="cm-muted">SECONDARY_EXPLANATION</p>
+  <div class="cm-footer"><span>AUTHOR_OR_SOURCE</span><span>PAGE_NUMBER</span></div>
 </section>
 ```
 
 **数据 / 网格页**
 ```html
-<section class="card" data-theme="ocean">
-  <div class="cm-bar"></div><h2>为什么重要</h2>
+<section class="card" data-theme="THEME_KEY">
+  <div class="cm-bar"></div><h2>PAGE_TITLE</h2>
   <div class="cm-grid cm-fill cm-mt">
-    <div class="cm-cell"><div class="cm-stat"><div class="cm-stat-num">80%</div><div class="cm-stat-label">价值来自 20% 的事</div></div></div>
-    <div class="cm-cell"><div class="cm-stat"><div class="cm-stat-num">2h</div><div class="cm-stat-label">每天的高效窗口</div></div></div>
+    <div class="cm-cell"><div class="cm-stat"><div class="cm-stat-num">METRIC_VALUE_A</div><div class="cm-stat-label">METRIC_LABEL_A</div></div></div>
+    <div class="cm-cell"><div class="cm-stat"><div class="cm-stat-num">METRIC_VALUE_B</div><div class="cm-stat-label">METRIC_LABEL_B</div></div></div>
   </div>
-  <div class="cm-footer"><span>@CardMaker</span><span>时间管理</span></div>
+  <div class="cm-footer"><span>AUTHOR_OR_SOURCE</span><span>PAGE_NUMBER</span></div>
 </section>
 ```
 
 **金句页**
 ```html
-<section class="card cm-middle" data-theme="ocean">
+<section class="card cm-middle" data-theme="THEME_KEY">
   <div class="cm-quote-mark">"</div>
-  <div class="cm-quote-text">你如何度过一天，<br>就如何度过一生。</div>
-  <div class="cm-footer cm-mt-lg"><span>@CardMaker</span></div>
+  <div class="cm-quote-text">QUOTE_TEXT</div>
+  <div class="cm-footer cm-mt-lg"><span>AUTHOR_OR_SOURCE</span></div>
 </section>
 ```
 
