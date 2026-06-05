@@ -738,6 +738,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       height: p.h,
       pixelRatio: 2,
       cacheBust: true,
+      fontEmbedCSS: "",
       style: { opacity: "1", visibility: "visible", position: "relative", transform: "none" },
     };
     var self = this;

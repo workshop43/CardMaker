@@ -554,6 +554,7 @@ function round2(n) {
 // 每次构造上下文都打印摘要，方便确认模型到底拿到了什么。
 function logAIContext(context) {
   if (!context || typeof console === "undefined") return;
+  if (!window.CARDMAKER_DEBUG_AI) return;
   console.info("[CardMaker AI] full context", {
     purpose: context.purpose,
     canvas: context.canvas,
