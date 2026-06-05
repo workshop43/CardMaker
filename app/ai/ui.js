@@ -5,11 +5,13 @@
 import { CardMaker } from "../deck.js";
 import { listProviders, defaultProvider, loadSaved, saveCfg, resolveCfg, setLastCfg } from "./model.js";
 import { extractStyle } from "./model.js";
-import { makePlan, makeDesignSample, renderPage, editPage, editStyle } from "./pipeline.js";
+import { classifyIntent, makePlan, makeDesignSample, renderPage, editPage, makeContentPatch, revisePlanStructure, editStyle } from "./pipeline.js";
 
 // ─── 状态 ─────────────────────────────────────────────────────────────────────
-let P = null;   // 面板 DOM 引用 { msgs, input, send, preset, pages, opts }
+let P = null;   // 面板 DOM 引用 { msgs, input, send, styleFile, styleStatus }
 let S = null;   // 生成会话 { app,cfg,preset,PSet,plan,designStyle,sections,nextIdx,sampleIdx,sampleSection,aborted }
+let activeJob = null; // 当前 LLM 请求 { controller }
+let uploadedStyle = null; // 当前 conversation 附加的样式 { name, style }
 
 // ─── 入口 ─────────────────────────────────────────────────────────────────────
 export function mountAI(app) {
@@ -24,46 +26,94 @@ function buildPanel(app) {
   wrap.innerHTML =
     '<div class="cm-ai-head">' +
       '<span class="cm-ai-brand">AI 助手</span>' +
-      '<button class="cm-btn cm-ai-new" title="新建对话">新建</button>' +
       '<button class="cm-btn cm-ai-cfg" title="API 设置">⚙</button>' +
     "</div>" +
     '<div class="cm-ai-msgs"></div>' +
     '<div class="cm-ai-foot">' +
-      '<div class="cm-ai-opts">' +
-        '<select class="cm-select cm-ai-preset"></select>' +
-        '<input class="cm-ai-pages" type="text" inputmode="numeric" value="6" title="页数（如 6）" />' +
+      '<div class="cm-ai-quick-menu">' +
+        '<button class="cm-btn cm-ai-quick-trigger" type="button">快捷</button>' +
+        '<button class="cm-btn cm-ai-style-attach" type="button">上传样式</button>' +
+        '<input class="cm-ai-style-file" type="file" accept=".css,.txt,.html,text/css,text/plain,text/html" hidden />' +
+        '<div class="cm-ai-style-status" data-state="empty" hidden>' +
+          '<span class="cm-ai-style-dot"></span>' +
+          '<span class="cm-ai-style-text"></span>' +
+          '<button class="cm-ai-style-clear" type="button" hidden>移除</button>' +
+        "</div>" +
+        '<div class="cm-ai-quick-pop" hidden>' +
+          '<button class="cm-btn" data-quick="redesign">重做配色排版</button>' +
+          '<button class="cm-btn" data-quick="add-content">增加内容页</button>' +
+          '<button class="cm-btn" data-quick="ending">生成封底</button>' +
+          '<button class="cm-btn" data-quick="overflow">正文溢出重排</button>' +
+          '<button class="cm-btn" data-quick="reflow">正文排版重排</button>' +
+          '<button class="cm-btn" data-quick="expand">正文太少补充</button>' +
+        "</div>" +
       "</div>" +
       '<div class="cm-ai-input-wrap">' +
         '<textarea class="cm-ai-input" placeholder="描述你想做的卡片，或输入修改意见…\n⌘/Ctrl + Enter 发送" rows="3"></textarea>' +
-        '<button class="cm-btn cm-primary cm-ai-send">↑</button>' +
+        '<button class="cm-btn cm-primary cm-ai-send" title="发送" aria-label="发送"></button>' +
       "</div>" +
     "</div>";
   body.appendChild(wrap);
 
-  // 填充比例选项
-  const presetSel = wrap.querySelector(".cm-ai-preset");
-  Object.entries(CardMaker.PRESETS).forEach(([k, v]) => {
-    const o = document.createElement("option");
-    o.value = k; o.textContent = v.label; presetSel.appendChild(o);
-  });
-  presetSel.value = app.preset;
-  presetSel.onchange = () => app.setPreset(presetSel.value);
-
   P = {
     wrap, msgs: wrap.querySelector(".cm-ai-msgs"),
     input: wrap.querySelector(".cm-ai-input"), send: wrap.querySelector(".cm-ai-send"),
-    preset: presetSel, pages: wrap.querySelector(".cm-ai-pages"),
-    opts: wrap.querySelector(".cm-ai-opts"),
+    styleFile: wrap.querySelector(".cm-ai-style-file"),
+    styleStatus: wrap.querySelector(".cm-ai-style-status"),
+    styleText: wrap.querySelector(".cm-ai-style-text"),
+    styleClear: wrap.querySelector(".cm-ai-style-clear"),
   };
 
-  wrap.querySelector(".cm-ai-new").onclick = () => newConversation(app);
+  installStyleToolbar(app);
   wrap.querySelector(".cm-ai-cfg").onclick = () => openSettings(app);
+  const quickPop = wrap.querySelector(".cm-ai-quick-pop");
+  wrap.querySelector(".cm-ai-quick-trigger").onclick = (e) => { e.stopPropagation(); quickPop.hidden = !quickPop.hidden; };
+  wrap.querySelector(".cm-ai-style-attach").onclick = () => P.styleFile.click();
+  P.styleFile.onchange = () => importStyleFile(app, P.styleFile);
+  P.styleClear.onclick = () => {
+    uploadedStyle = null;
+    updateUploadedStyleUI();
+  };
+  document.addEventListener("click", (e) => {
+    if (!quickPop.hidden && !wrap.querySelector(".cm-ai-quick-menu").contains(e.target)) quickPop.hidden = true;
+  });
+  wrap.querySelectorAll("[data-quick]").forEach((btn) => {
+    btn.onclick = () => { quickPop.hidden = true; runQuickAction(app, btn.getAttribute("data-quick")); };
+  });
   P.send.onclick = () => handleSend(app);
   P.input.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); handleSend(app); }
   });
 
-  addAIMsg("你好！描述你想做的卡片，或在画布里选好页数和比例，直接发送主题开始生成。");
+  addAIMsg("你好！描述你想做的卡片，或在画布里选好比例，直接发送主题开始生成。页数可以留给 AI，也可以写在提示词里。");
+}
+
+// 在主窗口 toolbar 注入新建与样式导出按钮，和编辑/放映/保存 HTML 保持同一层级。
+function installStyleToolbar(app) {
+  const bar = app.app.querySelector(".cm-toolbar");
+  if (!bar) return;
+  if (!bar.querySelector(".cm-new-deck")) {
+    const btnNew = el("button", "cm-btn cm-new-deck", "新建");
+    btnNew.title = "清空当前画布，开始一个新 deck";
+    btnNew.onclick = () => clearStageForNewDeck(app);
+    const anchor = app.btnEdit && app.btnEdit.parentNode === bar ? app.btnEdit : null;
+    bar.insertBefore(btnNew, anchor);
+  }
+  if (!bar.querySelector(".cm-style-export")) {
+    const btnExport = el("button", "cm-btn cm-style-export", "导出样式");
+    btnExport.title = "导出当前全局样式";
+    btnExport.onclick = () => exportCurrentStyle(app);
+    const styleAnchor = app.btnSave && app.btnSave.parentNode === bar ? app.btnSave.nextSibling : null;
+    bar.insertBefore(btnExport, styleAnchor);
+  }
+}
+
+// 清空 stage，让下一条用户输入明确进入新生成流程；已上传的样式附件保留。
+function clearStageForNewDeck(app) {
+  if (activeJob) stopActiveJob();
+  S = null;
+  app.setHTML("");
+  addAIMsg("画布已清空。现在输入主题会生成新的 deck。");
 }
 
 // ─── 消息操作 ─────────────────────────────────────────────────────────────────
@@ -112,43 +162,222 @@ function setMsgActions(msgEl, actions) {
 
 function scrollMsgs() { P.msgs.scrollTop = P.msgs.scrollHeight; }
 
+function beginJob() {
+  if (activeJob) activeJob.controller.abort();
+  activeJob = { controller: new AbortController() };
+  P.send.classList.add("is-stop");
+  P.send.title = "停止生成";
+  P.send.setAttribute("aria-label", "停止生成");
+  return activeJob;
+}
+
+function endJob(job) {
+  if (job && activeJob !== job) return;
+  activeJob = null;
+  P.send.classList.remove("is-stop");
+  P.send.title = "发送";
+  P.send.setAttribute("aria-label", "发送");
+}
+
+function cfgWithSignal(cfg, job) {
+  return Object.assign({}, cfg, { signal: job.controller.signal });
+}
+
+function stopActiveJob() {
+  if (!activeJob) return false;
+  activeJob.controller.abort();
+  endJob(activeJob);
+  return true;
+}
+
+function isAbortError(e) {
+  return e && (e.name === "AbortError" || /abort/i.test(String(e.message || e)));
+}
+
 // ─── 发送处理 ─────────────────────────────────────────────────────────────────
-function handleSend(app) {
+async function handleSend(app) {
+  if (activeJob) { stopActiveJob(); return; }
   const text = P.input.value.trim();
   if (!text) return;
   const cfg = resolveCfg();
   if (!cfg) { addAIMsg("请先点击右上角 ⚙ 配置 API Key。"); openSettings(app); return; }
   P.input.value = "";
   addUserMsg(text);
-  // 有卡片且已完成生成 → 编辑模式；否则 → 新生成
-  if (app.cards.length && S && S.plan) {
-    runEdit(app, cfg, text);
-  } else {
-    runGenerate(app, cfg, text);
+  if (!app.cards.length && S && S.plan) {
+    reviseDraftPlan(app, cfg, text);
+    return;
   }
+  let intent;
+  try {
+    intent = await runIntent(app, cfg, text);
+  } catch (e) {
+    return;
+  }
+  routeIntent(app, cfg, text, intent);
+}
+
+async function runIntent(app, cfg, text) {
+  const job = beginJob();
+  const runCfg = cfgWithSignal(cfg, job);
+  const m = streamMsg();
+  m.setText("正在理解需求…");
+  try {
+    const intent = await classifyIntent(runCfg, intentContext(app), text);
+    m.done();
+    m.setHtml("已理解需求，开始处理。");
+    endJob(job);
+    if (!intent || intent.intent === "unknown") throw new Error("unknown intent");
+    return intent;
+  } catch (e) {
+    m.done();
+    m.setHtml(isAbortError(e) ? "已停止。" : "我没判断清楚你的意图。你是想新建一套、定向替换文字/组件、修改当前页、修改指定页、统一全套 UI/排版，还是增删/调整页面顺序？");
+    endJob(job);
+    throw e;
+  }
+}
+
+function routeIntent(app, cfg, text, intent) {
+  if (!app.cards.length && S && S.plan && intent.intent !== "generate_new") {
+    reviseDraftPlan(app, cfg, text);
+    return;
+  }
+  if (!app.cards.length || intent.intent === "generate_new") {
+    runGenerate(app, cfg, text);
+    return;
+  }
+  if (!ensureSessionFromDeck(app, cfg)) return runGenerate(app, cfg, text);
+  if (intent.intent === "edit_global_style" && shouldPreferContentPatch(text)) {
+    intent.intent = "edit_content";
+  }
+  if (intent.intent === "edit_structure") {
+    runStructureEdit(app, cfg, text);
+  } else if (intent.intent === "edit_global_style") {
+    doStyleEdit(app, text);
+  } else if (intent.intent === "edit_content") {
+    runContentPatch(app, cfg, text, intent);
+  } else if (intent.intent === "edit_page" || intent.intent === "edit_pages") {
+    runEdit(app, cfg, text, intent);
+  } else {
+    addAIMsg("我没判断清楚你的意图。你是想新建一套、定向替换文字/组件、修改当前页、修改指定页、统一全套 UI/排版，还是增删/调整页面顺序？");
+  }
+}
+
+// 执行快捷操作：跳过 intent 分类，直接进入对应的风格、结构或单页编辑 pipeline。
+function runQuickAction(app, key) {
+  if (activeJob) { stopActiveJob(); return; }
+  const cfg = resolveCfg();
+  const action = quickActionSpec(key);
+  if (!action) return;
+  if (!cfg) { addAIMsg("请先点击右上角 ⚙ 配置 API Key。"); openSettings(app); return; }
+  addUserMsg(action.label);
+  if (action.type === "style") {
+    if (!ensureSessionFromDeck(app, cfg)) { addAIMsg("当前没有可调整的 deck。"); return; }
+    doStyleEdit(app, action.prompt);
+    return;
+  }
+  if (action.type === "structure") {
+    if (!ensureSessionFromDeck(app, cfg)) { addAIMsg("当前没有可继续生成的 deck。"); return; }
+    runStructureEdit(app, cfg, action.prompt);
+    return;
+  }
+  if (action.type === "page") {
+    if (!ensureSessionFromDeck(app, cfg)) { addAIMsg("当前没有可修改的页面。"); return; }
+    const sourceIdx = sourcePageIdxFromViewIdx(app.index);
+    runEdit(app, cfg, action.prompt, { intent: "edit_page", target_pages: [sourceIdx + 1], reference_page: null });
+  }
+}
+
+// 快捷操作配置：按钮文案和实际发送给对应 pipeline 的精确任务说明。
+function quickActionSpec(key) {
+  const actions = {
+    redesign: {
+      type: "style",
+      label: "整体配色和排版不好看，重新设计",
+      prompt: "重新设计整套 deck 的全局视觉系统。保留现有内容与页面结构，重做配色、字体层级、内容块组件、header/footer、标题/副标题层级和整体排版节奏，让整套更统一、更好看。",
+    },
+    "add-content": {
+      type: "structure",
+      label: "增加页面继续生成内容",
+      prompt: "在当前 deck 中增加一页新的内容页，继续展开主题，不生成封底。新增页需要与上下文衔接，role 使用 content 或 data。",
+    },
+    ending: {
+      type: "structure",
+      label: "生成封底",
+      prompt: "在当前 deck 末尾增加一页封底，作为整套内容的收束页，role 使用 ending。",
+    },
+    overflow: {
+      type: "page",
+      label: "页面正文内容溢出容器/页面需重新排版",
+      prompt: "当前页正文内容溢出页面或容器。重新排版当前页，降低标题占用、压缩间距、调整列数或内容块密度，确保正文、页眉、页脚、页码都完整留在页面内，不裁切、不重叠。",
+    },
+    reflow: {
+      type: "page",
+      label: "页面正文内容排版不当，需重新排版",
+      prompt: "当前页正文内容排版不当。重新组织当前页的信息层级、标题、正文块、列布局和留白，让阅读顺序清楚、密度均衡，并保持整套全局样式一致。",
+    },
+    expand: {
+      type: "page",
+      label: "页面正文内容太少，需补充",
+      prompt: "当前页正文内容偏少。基于当前页主题补充必要说明、例子或要点，让页面信息量更充实，同时保持文字适合当前画布且不溢出。",
+    },
+  };
+  return actions[key] || null;
+}
+
+function intentContext(app) {
+  const cards = app.cards || [];
+  return {
+    has_deck: cards.length > 0,
+    existing_deck_is_current_canvas: cards.length > 0,
+    style_attachment: uploadedStyle ? {
+      name: uploadedStyle.name,
+      state: "attached_for_next_instruction",
+      purpose: "conversation input style; use it as the visual style for the user's next deck task",
+      current_canvas_note: "the existing canvas is background context and is not automatically the edit target",
+    } : null,
+    total_pages: cards.length,
+    current_page: cards.length ? app.index + 1 : null,
+    preset: app.preset,
+    deck_title: app.title || "",
+    pages: cards.map((card, i) => ({
+      page: i + 1,
+      role: card.getAttribute("data-role") || "",
+      title: compactText((card.querySelector("h1,h2,.cm-display,.cm-title") || card).textContent).slice(0, 80),
+      header: compactText((card.querySelector(".cm-header") || {}).textContent || "").slice(0, 120),
+      footer: compactText((card.querySelector(".cm-footer") || {}).textContent || "").slice(0, 120),
+    })),
+  };
 }
 
 function newConversation(app) {
   S = null;
+  uploadedStyle = null;
+  updateUploadedStyleUI();
   addAIMsg("好的，开始新对话。描述你想做的卡片主题。");
 }
 
-// ─── 生成流程（三步确认） ─────────────────────────────────────────────────────
+// ─── 生成流程：大纲确认 → 封面+首个内容页确认 → 后续逐页确认 ─────────────────────
 async function runGenerate(app, cfg, topic) {
-  const preset = P.preset.value;
-  const pages = parseInt(P.pages.value, 10) || 6;
-  app.setPreset(preset);
+  const job = beginJob();
+  const runCfg = cfgWithSignal(cfg, job);
+  const preset = app.preset;
   const PSet = CardMaker.PRESETS[preset];
 
-  S = { app, cfg, preset, PSet, topic, plan: null, designStyle: "", sections: [], nextIdx: 0, aborted: false, sampleIdx: 0, sampleSection: "" };
+  S = { app, cfg: runCfg, preset, PSet, topic, plan: null, designStyle: "", sections: [], nextIdx: 0, aborted: false, sampleIdx: 0, sampleSection: "", uploadedStyle };
 
   // 第1步：构思内容
   const m1 = streamMsg();
   m1.setText("正在构思内容大纲…");
   try {
-    S.plan = await makePlan(cfg, preset, pages, topic);
-  } catch (e) { m1.done(); m1.setHtml('<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>"); return; }
+    S.plan = await makePlan(runCfg, preset, null, topic);
+  } catch (e) {
+    m1.done();
+    m1.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
+    endJob(job);
+    return;
+  }
   m1.done();
+  endJob(job);
 
   // 显示大纲
   const planHtml = formatPlan(S.plan);
@@ -157,76 +386,209 @@ async function runGenerate(app, cfg, topic) {
 
   m1.addActions([
     { label: "重新构思", onClick: () => { S = null; addUserMsg("（重新构思）"); runGenerate(app, cfg, topic); } },
-    { label: "开始设计样式", primary: true, onClick: () => runDesign(app) },
+    { label: "开始", primary: true, onClick: () => runDesign(app) },
+  ]);
+}
+
+// 大纲确认阶段的用户反馈：页面还没生成时，只修当前 plan，避免把“改成 5 页”等反馈当成新 deck。
+async function reviseDraftPlan(app, cfg, feedback) {
+  const job = beginJob();
+  const runCfg = cfgWithSignal(cfg, job);
+  const m = streamMsg();
+  m.setText("正在调整内容大纲…");
+  try {
+    S.plan = await revisePlanStructure(runCfg, S.plan, feedback, 1);
+  } catch (e) {
+    m.done();
+    m.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
+    endJob(job);
+    return;
+  }
+  m.done();
+  endJob(job);
+  m.setHtml(formatPlan(S.plan));
+  m.addActions([
+    { label: "重新构思", onClick: () => { const topic = S.topic; S = null; addUserMsg("（重新构思）"); runGenerate(app, cfg, topic); } },
+    { label: "开始", primary: true, onClick: () => runDesign(app) },
   ]);
 }
 
 async function runDesign(app) {
+  const job = beginJob();
+  S.cfg = cfgWithSignal(S.cfg, job);
   S.aborted = false;
   const m = streamMsg();
-  m.setText("正在设计风格 + 排样板页，请稍候…");
+  m.setText((S.uploadedStyle ? "正在套用上传样式" : "正在设计风格") + " + 排封面和第一个内容页，请稍候…");
   try {
     S.sampleIdx = pickSampleIdx(S.plan);
-    const r = await makeDesignSample(S.cfg, S.preset, S.PSet, S.plan, S.plan.pages[S.sampleIdx],
-      (txt, thinking) => { if (!thinking) m.setText("正在设计风格…"); });
-    S.designStyle = r.style;
-    S.sampleSection = r.section;
+    if (S.uploadedStyle && S.uploadedStyle.style) {
+      S.designStyle = S.uploadedStyle.style;
+      m.setText("正在使用上传样式生成第一个内容页…");
+    } else {
+      const r = await makeDesignSample(S.cfg, S.preset, S.PSet, S.plan, S.plan.pages[S.sampleIdx],
+        S.sampleIdx + 1, S.plan.pages.length,
+        (txt, thinking) => { if (!thinking) m.setText("正在设计风格…"); });
+      S.designStyle = r.style;
+      S.sampleSection = r.section;
+      if (S.sampleSection) S.sections[S.sampleIdx] = S.sampleSection;
+    }
+    if (!S.sections[S.sampleIdx]) {
+      m.setText("正在生成第一个内容页…");
+      S.sections[S.sampleIdx] = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle,
+        S.plan.pages[S.sampleIdx], "", S.sampleIdx + 1, S.plan.pages.length, "");
+    }
+
+    const coverIdx = pickCoverIdx(S.plan);
+    if (coverIdx !== S.sampleIdx && !S.sections[coverIdx]) {
+      m.setText("正在生成封面…");
+      S.sections[coverIdx] = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle,
+        S.plan.pages[coverIdx], "", coverIdx + 1, S.plan.pages.length, confirmedLayoutReference(coverIdx));
+    }
+
+    S.nextIdx = findNextPageIdx();
     m.done();
-    if (S.sampleSection) { app.setHTML(S.designStyle + "\n" + S.sampleSection); app.goTo(0); }
-    m.setHtml("风格样板已就绪，请查看左侧画布。");
+    applySections(app);
+    app.goTo(0);
+    m.setHtml("封面和第一个内容页已就绪，请查看左侧画布。确认通过后再继续生成后续页面。");
     m.addActions([
-      { label: "重做样式", onClick: () => runDesign(app) },
-      { label: "排全部页", primary: true, onClick: () => runRender(app) },
+      { label: "重做前两页", onClick: () => resetInitialPagesAndDesign(app) },
+      ...renderProgressActions(S.plan.pages.length, null, m.el),
     ]);
-  } catch (e) { m.done(); m.setHtml('<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>"); }
+    endJob(job);
+  } catch (e) {
+    m.done();
+    m.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
+    endJob(job);
+  }
+}
+
+// 重置首轮预览相关状态，避免旧样式或旧页面混入重新生成结果。
+function resetInitialPagesAndDesign(app) {
+  S.designStyle = "";
+  S.sections = [];
+  S.nextIdx = 0;
+  S.sampleSection = "";
+  addUserMsg("（重做封面和第一个内容页）");
+  runDesign(app);
 }
 
 async function runRender(app) {
+  const job = beginJob();
+  S.cfg = cfgWithSignal(S.cfg, job);
   const total = S.plan.pages.length;
-  if (S.sampleSection) S.sections[S.sampleIdx] = S.sampleSection;
-  S.nextIdx = 0; S.aborted = false;
+  S.nextIdx = findNextPageIdx();
   const m = streamMsg();
 
-  const updateProgress = () => {
-    const done = S.sections.filter(Boolean).length;
-    m.setText("正在排版：" + done + " / " + total + " 页…");
-  };
-  updateProgress();
-  m.addActions([{ label: "停止", onClick: () => { S.aborted = true; } }]);
+  if (S.nextIdx < 0) {
+    m.done();
+    m.setHtml(total + " / " + total + " 页已全部生成。可在输入框描述修改意见继续调整。");
+    setMsgActions(m.el, []);
+    endJob(job);
+    return;
+  }
 
   try {
-    for (let i = S.nextIdx; i < total; i++) {
-      if (S.aborted) break;
-      if (S.sections[i]) { updateProgress(); applySections(app); continue; }
-      const prev = S.sections[i - 1] || "";
-      const sec = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle, S.plan.pages[i], prev, i + 1, total);
-      S.sections[i] = sec;
-      S.nextIdx = i + 1;
-      applySections(app);
-      updateProgress();
-    }
+    const i = S.nextIdx;
+    m.setText("正在生成第 " + (i + 1) + " / " + total + " 页…");
+    const prev = findPrevSection(i);
+    const sec = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle, S.plan.pages[i], prev, i + 1, total, confirmedLayoutReference(i));
+    S.sections[i] = sec;
+    S.nextIdx = findNextPageIdx();
+    applySections(app);
+    app.goTo(S.sections.slice(0, i + 1).filter(Boolean).length - 1);
     m.done();
     const done = S.sections.filter(Boolean).length;
-    m.setHtml(done + " / " + total + " 页已生成。可在输入框描述修改意见，或点「新建」开始新主题。");
-    setMsgActions(m.el, [
-      { label: "改整套风格", onClick: () => promptStyleEdit(app) },
-    ]);
-  } catch (e) { m.done(); m.setHtml('<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>"); }
+    m.setHtml("第 " + (i + 1) + " / " + total + " 页已生成，请确认左侧画布。当前进度：" + done + " / " + total + "。");
+    setMsgActions(m.el, renderProgressActions(total, i, m.el));
+    endJob(job);
+  } catch (e) {
+    m.done();
+    m.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
+    endJob(job);
+  }
 }
 
 // ─── 编辑流程 ─────────────────────────────────────────────────────────────────
-async function runEdit(app, cfg, feedback) {
-  const idx = app.index, total = app.cards.length, preset = app.preset;
+async function runEdit(app, cfg, feedback, intent) {
+  ensureSessionFromDeck(app, cfg);
+  const job = beginJob();
+  const runCfg = cfgWithSignal(cfg, job);
+  const currentSourceIdx = sourcePageIdxFromViewIdx(app.index);
+  const targets = intentTargetSourceIdxs(intent, currentSourceIdx);
+  const referenceIdx = intentReferenceSourceIdx(intent);
+  const total = editTotalPages(app), preset = app.preset;
   const PSet = CardMaker.PRESETS[preset];
   const designStyle = S ? S.designStyle : extractStyleFromDeck(app);
   const m = streamMsg();
-  m.setText("正在修改第 " + (idx + 1) + " / " + total + " 页…");
   try {
-    const sec = await editPage(cfg, preset, PSet, designStyle, app.currentCardHTML(), feedback, idx + 1, total);
-    app.patchDeck({ pages: { [idx]: sec } }); app.goTo(idx);
-    if (S) S.sections[idx] = sec;
-    m.done(); m.setHtml("第 " + (idx + 1) + " 页已修改，请查看画布。");
-  } catch (e) { m.done(); m.setHtml('<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>"); }
+    const resolvedTargets = resolveEditTargets(app, targets);
+    const patch = {};
+    const changedTargets = [];
+    for (let i = 0; i < resolvedTargets.length; i++) {
+      const target = resolvedTargets[i];
+      const sourceIdx = target.sourceIdx;
+      const referenceHTML = referenceIdx >= 0 && referenceIdx !== sourceIdx
+        ? namedReferenceHTML([{ idx: referenceIdx, html: S.sections[referenceIdx] || "" }])
+        : confirmedLayoutReference(sourceIdx);
+      m.setText("正在修改第 " + (sourceIdx + 1) + " / " + total + " 页…");
+      let sec = await editPage(runCfg, preset, PSet, designStyle, target.currentHTML, feedback, sourceIdx + 1, total, referenceHTML);
+      if (sameSection(sec, target.currentHTML)) {
+        console.warn("[CardMaker AI] edit page returned no visible change", { page: sourceIdx + 1 });
+        sec = await editPage(runCfg, preset, PSet, designStyle, target.currentHTML, feedback + "\n\n上一轮返回与原页面几乎相同。请优先落实样式/视觉一致性：复用参考页和全局样式里的组件 class、data-theme、视觉层级和内容块形态，让这一页产生可见的样式变化。", sourceIdx + 1, total, referenceHTML);
+      }
+      if (sameSection(sec, target.currentHTML)) throw new Error("第 " + (sourceIdx + 1) + " 页模型返回内容与原页面基本一致，未实际修改。");
+      patch[target.viewIdx] = sec;
+      S.sections[sourceIdx] = sec;
+      changedTargets.push(sourceIdx);
+    }
+    if (!Object.keys(patch).length) throw new Error("没有找到可修改的目标页面。");
+    app.patchDeck({ pages: patch });
+    app.goTo(Math.max(0, viewIdxFromSourcePageIdx(changedTargets[0])));
+    m.done(); m.setHtml(formatEditDone(changedTargets));
+    endJob(job);
+  } catch (e) {
+    m.done();
+    m.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
+    endJob(job);
+  }
+}
+
+// ─── 结构编辑：增删页面 / 调整顺序 ───────────────────────────────────────────────
+async function runStructureEdit(app, cfg, feedback) {
+  ensureSessionFromDeck(app, cfg);
+  const job = beginJob();
+  const runCfg = cfgWithSignal(cfg, job);
+  const sourceIdx = sourcePageIdxFromViewIdx(app.index);
+  const m = streamMsg();
+  m.setText("正在调整页面结构…");
+  try {
+    const revised = await revisePlanStructure(runCfg, S.plan, feedback, sourceIdx + 1);
+    if (!revised.pages || !revised.pages.length) throw new Error("结构调整后没有页面。");
+    revised.title = revised.title || S.plan.title;
+    revised.scene = revised.scene || S.plan.scene;
+    revised.theme = revised.theme || S.plan.theme;
+    revised.font = revised.font || S.plan.font;
+    const mapped = mapSectionsToRevisedPlan(revised, S.sections);
+    S.plan = revised;
+    S.sections = mapped.sections;
+    S.nextIdx = findNextPageIdx();
+    applySections(app);
+    app.goTo(Math.min(mapped.focusIdx, Math.max(0, app.cards.length - 1)));
+    m.done();
+    const done = S.sections.filter(Boolean).length;
+    const total = S.plan.pages.length;
+    endJob(job);
+    if (S.nextIdx >= 0) {
+      m.setHtml("页面结构已调整。当前已生成 " + done + " / " + total + " 页，开始生成新增页面。");
+      return runRender(app);
+    }
+    m.setHtml("页面结构已调整。当前已生成 " + done + " / " + total + " 页。");
+    setMsgActions(m.el, renderProgressActions(total, sourceIdx, m.el));
+  } catch (e) {
+    m.done();
+    m.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
+    endJob(job);
+  }
 }
 
 // 触发整套风格修改
@@ -236,6 +598,7 @@ function promptStyleEdit(app) {
   // 下一次发送强制走整套风格
   const origSend = P.send.onclick;
   P.send.onclick = () => {
+    if (activeJob) { stopActiveJob(); return; }
     const text = P.input.value.trim();
     if (!text) return;
     P.input.value = "";
@@ -246,17 +609,111 @@ function promptStyleEdit(app) {
 }
 
 async function doStyleEdit(app, feedback) {
-  const cfg = resolveCfg(); if (!cfg) return;
+  ensureSessionFromDeck(app, resolveCfg());
+  const job = beginJob();
+  const cfg = resolveCfg(); if (!cfg) { endJob(job); return; }
+  const runCfg = cfgWithSignal(cfg, job);
   const preset = app.preset, PSet = CardMaker.PRESETS[preset];
-  const curStyle = S ? S.designStyle : extractStyleFromDeck(app);
-  if (!curStyle) { addAIMsg("当前 deck 没有可改的全局 <style>。"); return; }
+  const curStyle = currentDesignStyle(app);
+  if (!curStyle) { addAIMsg("当前 deck 没有可改的全局 <style>。"); endJob(job); return; }
   const m = streamMsg(); m.setText("正在修改整套风格…");
   try {
-    const r = await editStyle(cfg, preset, PSet, curStyle, feedback);
+    const r = await editStyle(runCfg, preset, PSet, curStyle, feedback, deckReferenceHTML());
     app.patchDeck({ style: r.style }); if (r.font) app.setFont(r.font);
     if (S) S.designStyle = r.style;
     m.done(); m.setHtml("整套风格已更新，请查看画布。");
-  } catch (e) { m.done(); m.setHtml('<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>"); }
+    endJob(job);
+  } catch (e) {
+    m.done();
+    m.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
+    endJob(job);
+  }
+}
+
+// 导出当前 deck 级 <style>，便于把好看的风格保存成可复用样式文件。
+function exportCurrentStyle(app) {
+  ensureSessionFromDeck(app, resolveCfg());
+  const style = currentDesignStyle(app);
+  if (!style) { addAIMsg("当前 deck 没有可导出的样式。"); return; }
+  downloadText(style, styleFileName(app), "text/css;charset=utf-8");
+  addAIMsg("当前全局样式已导出。");
+}
+
+// 读取用户上传的样式文件，作为当前 conversation 的样式附件。
+function importStyleFile(app, input) {
+  const file = input && input.files && input.files[0];
+  if (input) input.value = "";
+  if (!file) return;
+  file.text().then((text) => {
+    const style = styleFromUploadedText(text);
+    if (!style) {
+      updateUploadedStyleUI("上传失败：未识别到可用样式");
+      addAIMsg("上传文件里没有识别到可用样式。支持 <style>…</style> 或纯 CSS。");
+      return;
+    }
+    uploadedStyle = { name: file.name, style };
+    updateUploadedStyleUI();
+    addAIMsg("已上传样式「" + file.name + "」。后续生成新 deck 会优先使用这份样式。");
+  }).catch((e) => {
+    updateUploadedStyleUI("读取样式文件失败");
+    addAIMsg("读取样式文件失败：" + String(e.message || e));
+  });
+}
+
+// 从上传内容中提取 <style>，或把纯 CSS 包装成 deck 级 <style>。
+function styleFromUploadedText(text) {
+  const existing = extractStyle(text || "");
+  if (existing) return existing;
+  const css = String(text || "").trim();
+  if (!css || /<\/?(html|body|section|div|script)\b/i.test(css)) return "";
+  return "<style>\n" + css + "\n</style>";
+}
+
+// 刷新输入区附近的样式附件状态。
+function updateUploadedStyleUI(errorText) {
+  if (!P || !P.styleStatus || !P.styleText || !P.styleClear) return;
+  if (errorText) {
+    P.styleStatus.setAttribute("data-state", "error");
+    P.styleStatus.hidden = false;
+    P.styleText.textContent = errorText;
+    P.styleClear.hidden = true;
+    return;
+  }
+  if (!uploadedStyle) {
+    P.styleStatus.setAttribute("data-state", "empty");
+    P.styleStatus.hidden = true;
+    P.styleText.textContent = "";
+    P.styleClear.hidden = true;
+    return;
+  }
+  P.styleStatus.hidden = false;
+  P.styleStatus.setAttribute("data-state", "ready");
+  P.styleText.textContent = "已附加样式：" + uploadedStyle.name;
+  P.styleClear.hidden = false;
+}
+
+// 触发浏览器下载一段文本内容。
+function downloadText(text, name, type) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: type || "text/plain;charset=utf-8" }));
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
+// 生成样式文件名，和 deck 标题保持一致。
+function styleFileName(app) {
+  return slug(app.title || "cardmaker") + ".cardmaker-style.css";
+}
+
+// 把标题压成适合下载文件名的短 slug。
+function slug(s) {
+  return String(s || "cardmaker").trim().toLowerCase()
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^a-z0-9\u4e00-\u9fa5-]+/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "cardmaker";
 }
 
 // ─── 辅助 ─────────────────────────────────────────────────────────────────────
@@ -266,14 +723,589 @@ function applySections(app) {
   app.goTo(Math.max(0, S.sections.filter(Boolean).length - 1));
 }
 
+// 当前画布只渲染已生成页面，view index 需要映射回 plan/sections 的原始 page index。
+function sourcePageIdxFromViewIdx(viewIdx) {
+  if (!S || !S.sections || !S.sections.length) return viewIdx;
+  const generated = [];
+  S.sections.forEach((sec, i) => { if (sec) generated.push(i); });
+  return generated[viewIdx] != null ? generated[viewIdx] : viewIdx;
+}
+
+function viewIdxFromSourcePageIdx(sourceIdx) {
+  if (!S || !S.sections || !S.sections.length) return sourceIdx;
+  let viewIdx = -1;
+  for (let i = 0; i <= sourceIdx; i++) {
+    if (S.sections[i]) viewIdx++;
+  }
+  return S.sections[sourceIdx] ? viewIdx : -1;
+}
+
+function editTotalPages(app) {
+  return S && S.plan && S.plan.pages ? S.plan.pages.length : app.cards.length;
+}
+
+function intentTargetSourceIdxs(intent, currentSourceIdx) {
+  const total = editTotalPages(S.app);
+  const pages = intent && Array.isArray(intent.target_pages) ? intent.target_pages : [];
+  const valid = pages.map((n) => parseInt(n, 10)).filter((n) => n >= 1 && n <= total);
+  const uniq = Array.from(new Set(valid));
+  return (uniq.length ? uniq : [currentSourceIdx + 1]).map((n) => n - 1);
+}
+
+function intentReferenceSourceIdx(intent) {
+  const page = intent && intent.reference_page != null ? parseInt(intent.reference_page, 10) : 0;
+  const idx = page - 1;
+  return S && S.sections && S.sections[idx] ? idx : -1;
+}
+
+function resolveEditTargets(app, targets) {
+  const missing = [];
+  const resolved = targets.map((sourceIdx) => {
+    let viewIdx = viewIdxFromSourcePageIdx(sourceIdx);
+    let currentHTML = S && S.sections ? (S.sections[sourceIdx] || "") : "";
+    if (!currentHTML && app.cards.length === editTotalPages(app) && app.cards[sourceIdx]) {
+      currentHTML = app.cards[sourceIdx].outerHTML;
+      S.sections[sourceIdx] = currentHTML;
+      viewIdx = sourceIdx;
+    }
+    if (viewIdx < 0 || !currentHTML) {
+      missing.push(sourceIdx + 1);
+      return null;
+    }
+    return { sourceIdx, viewIdx, currentHTML };
+  }).filter(Boolean);
+  if (missing.length) {
+    console.warn("[CardMaker AI] edit target page not found", { missing, targets: targets.map((i) => i + 1), sections: S && S.sections && S.sections.map(Boolean) });
+    throw new Error("第 " + missing.join("、") + " 页还没有生成或无法定位，不能直接修改。请先生成这些页面，或明确要修改当前可见页面。");
+  }
+  return resolved;
+}
+
+function formatEditDone(targets) {
+  const nums = targets.map((i) => i + 1).join("、");
+  return "第 " + nums + " 页已修改，请查看画布。";
+}
+
+// ─── 定向内容/组件补丁：替换文字、改特定组件属性/class/局部 style ───────────────
+async function runContentPatch(app, cfg, feedback, intent) {
+  ensureSessionFromDeck(app, cfg);
+  const job = beginJob();
+  const runCfg = cfgWithSignal(cfg, job);
+  const m = streamMsg();
+  m.setText("正在生成定向内容补丁…");
+  try {
+    const context = contentPatchContext(app, intent, feedback);
+    const patch = await makeContentPatch(runCfg, context, feedback);
+    const result = applyContentPatch(app, patch, intent);
+    if (!result.changed.length) throw new Error("补丁没有命中任何内容或组件。请明确页码、组件名或要替换的原文字。");
+    app.patchDeck({ pages: result.pages });
+    syncPatchedSections(result.pages);
+    app.goTo(Math.max(0, result.changed[0].viewIdx));
+    m.done();
+    m.setHtml("已定向更新第 " + result.changed.map((p) => p.sourceIdx + 1).join("、") + " 页，共执行 " + result.count + " 处修改。");
+    endJob(job);
+  } catch (e) {
+    m.done();
+    m.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
+    endJob(job);
+  }
+}
+
+function contentPatchContext(app, intent, feedback) {
+  const currentSourceIdx = sourcePageIdxFromViewIdx(app.index);
+  const targetIdxs = mentionsAllPages(feedback)
+    ? allPatchableSourceIdxs(app)
+    : intentTargetSourceIdxs(intent, currentSourceIdx);
+  const pages = resolveEditTargets(app, targetIdxs).map((target) => ({
+    page: target.sourceIdx + 1,
+    current: target.sourceIdx === currentSourceIdx,
+    html: target.currentHTML,
+    text: compactText(htmlText(target.currentHTML)).slice(0, 1600),
+  }));
+  return {
+    current_page: currentSourceIdx + 1,
+    total_pages: editTotalPages(app),
+    all_pages_requested: mentionsAllPages(feedback),
+    target_pages: targetIdxs.map((i) => i + 1),
+    selector_hints: selectorHints(),
+    pages,
+  };
+}
+
+function mentionsAllPages(text) {
+  return /(全套|全部|所有|每页|每一页|批量|统一替换|全部替换|全局替换)/.test(String(text || ""));
+}
+
+function allPatchableSourceIdxs(app) {
+  const total = editTotalPages(app);
+  const out = [];
+  for (let i = 0; i < total; i++) {
+    const viewIdx = viewIdxFromSourcePageIdx(i);
+    if ((S && S.sections && S.sections[i]) || (viewIdx >= 0 && app.cards[viewIdx])) out.push(i);
+  }
+  return out.length ? out : [sourcePageIdxFromViewIdx(app.index)];
+}
+
+function selectorHints() {
+  return [
+    ".cm-header",
+    ".cm-header span:first-child",
+    ".cm-header span:last-child",
+    ".cm-main",
+    ".cm-footer",
+    ".cm-footer span:first-child",
+    ".cm-footer span:last-child",
+    "h1,h2,.cm-title,.cm-display",
+    ".cm-subtitle",
+    ".cm-cell",
+    ".cm-kicker",
+  ];
+}
+
+function htmlText(html) {
+  const doc = new DOMParser().parseFromString(html || "", "text/html");
+  return doc.body.textContent || "";
+}
+
+function applyContentPatch(app, patch, intent) {
+  const currentSourceIdx = sourcePageIdxFromViewIdx(app.index);
+  const defaultTargets = intentTargetSourceIdxs(intent, currentSourceIdx);
+  const total = editTotalPages(app);
+  const pages = {};
+  const changed = [];
+  let count = 0;
+  const touched = new Map();
+  (patch.ops || []).forEach((op) => {
+    const sourceIdxs = patchOpTargets(op, defaultTargets, total);
+    sourceIdxs.forEach((sourceIdx) => {
+      const target = getPatchTarget(app, sourceIdx, touched);
+      if (!target) return;
+      const before = target.card.outerHTML;
+      count += applyPatchOp(target.card, op);
+      if (target.card.outerHTML !== before) {
+        pages[target.viewIdx] = target.card.outerHTML;
+        if (!changed.some((p) => p.sourceIdx === sourceIdx)) changed.push({ sourceIdx, viewIdx: target.viewIdx });
+      }
+    });
+  });
+  return { pages, changed, count };
+}
+
+function patchOpTargets(op, fallback, total) {
+  if (op.page === "all") return Array.from({ length: total }, (_, i) => i);
+  const page = parseInt(op.page, 10);
+  if (page >= 1 && page <= total) return [page - 1];
+  return fallback && fallback.length ? fallback : [0];
+}
+
+function getPatchTarget(app, sourceIdx, touched) {
+  if (touched.has(sourceIdx)) return touched.get(sourceIdx);
+  let viewIdx = viewIdxFromSourcePageIdx(sourceIdx);
+  let currentHTML = S && S.sections ? (S.sections[sourceIdx] || "") : "";
+  if (!currentHTML && app.cards.length === editTotalPages(app) && app.cards[sourceIdx]) {
+    currentHTML = app.cards[sourceIdx].outerHTML;
+    viewIdx = sourceIdx;
+  }
+  if (viewIdx < 0 || !currentHTML) return null;
+  const doc = new DOMParser().parseFromString(currentHTML, "text/html");
+  const card = doc.body.querySelector("section.card");
+  if (!card) return null;
+  const target = { sourceIdx, viewIdx, card };
+  touched.set(sourceIdx, target);
+  return target;
+}
+
+function applyPatchOp(card, op) {
+  const nodes = op.selector ? Array.from(card.querySelectorAll(op.selector)) : [card];
+  let changed = 0;
+  nodes.forEach((node) => {
+    const before = node.outerHTML || node.textContent || "";
+    if (op.op === "replace_text") replaceTextInNode(node, op);
+    else if (op.op === "set_text") node.textContent = String(op.text || "");
+    else if (op.op === "set_html") node.innerHTML = sanitizePatchHTML(op.html);
+    else if (op.op === "remove") node.remove();
+    else if (op.op === "set_attr") setSafeAttr(node, op.name, op.value);
+    else if (op.op === "remove_attr") node.removeAttribute(String(op.name || ""));
+    else if (op.op === "add_class") classListApply(node, op.class, true);
+    else if (op.op === "remove_class") classListApply(node, op.class, false);
+    else if (op.op === "set_style") mergeInlineStyle(node, op.style);
+    const after = node.isConnected ? (node.outerHTML || node.textContent || "") : "";
+    if (before !== after) changed++;
+  });
+  return changed;
+}
+
+function replaceTextInNode(root, op) {
+  const from = String(op.from || "");
+  const to = String(op.to || "");
+  const mode = String(op.mode || "contains");
+  const doc = root.ownerDocument;
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const texts = [];
+  while (walker.nextNode()) texts.push(walker.currentNode);
+  texts.forEach((node) => {
+    const text = node.nodeValue || "";
+    if (mode === "exact" && text.trim() === from) node.nodeValue = text.replace(from, to);
+    else if (mode === "regex") {
+      try { node.nodeValue = text.replace(new RegExp(from, "g"), to); } catch (e) { /* ignore bad regex */ }
+    } else if (text.indexOf(from) !== -1) node.nodeValue = text.split(from).join(to);
+  });
+}
+
+function sanitizePatchHTML(html) {
+  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+  doc.body.querySelectorAll("script,style,link,iframe,object,embed").forEach((n) => n.remove());
+  return doc.body.innerHTML;
+}
+
+function setSafeAttr(node, name, value) {
+  name = String(name || "").trim();
+  if (!name || /^on/i.test(name) || /^(src|href)$/i.test(name)) return;
+  node.setAttribute(name, String(value || ""));
+}
+
+function classListApply(node, classText, add) {
+  String(classText || "").split(/\s+/).filter(Boolean).forEach((cls) => {
+    if (add) node.classList.add(cls);
+    else node.classList.remove(cls);
+  });
+}
+
+function mergeInlineStyle(node, styleText) {
+  String(styleText || "").split(";").map((s) => s.trim()).filter(Boolean).forEach((decl) => {
+    const i = decl.indexOf(":");
+    if (i <= 0) return;
+    const prop = decl.slice(0, i).trim();
+    const value = decl.slice(i + 1).trim();
+    if (prop) node.style.setProperty(prop, value);
+  });
+}
+
+function syncPatchedSections(pages) {
+  if (!S || !S.sections) return;
+  Object.keys(pages || {}).forEach((viewIdxText) => {
+    const viewIdx = parseInt(viewIdxText, 10);
+    const sourceIdx = sourcePageIdxFromViewIdx(viewIdx);
+    if (sourceIdx >= 0) S.sections[sourceIdx] = pages[viewIdxText];
+  });
+}
+
+function shouldPreferContentPatch(text) {
+  return /(替换|换掉|删掉|删除|去掉|改成|改为|文案|文字|内容|header|footer|页眉|页脚|标题|副标题|组件|class|style|样式属性|右上角|左上角|右下角|左下角)/i.test(String(text || "")) &&
+    !/(整体|整套|全局|统一风格|重新设计|重做配色|换主题|视觉系统)/.test(String(text || ""));
+}
+
+function sameSection(a, b) {
+  return sectionFingerprint(a) === sectionFingerprint(b);
+}
+
+function sectionFingerprint(html) {
+  return compactText(String(html || "")
+    .replace(/data-cm-active="[^"]*"/g, "")
+    .replace(/\s(id|aria-[\w-]+)="[^"]*"/g, "")
+    .replace(/>\s+</g, "><"));
+}
+
+function ensureSessionFromDeck(app, cfg) {
+  if (!app.cards || !app.cards.length) return false;
+  const html = app.getHTML();
+  const parsed = parseDeckHTML(html);
+  if (!parsed.sections.length) return false;
+  if (S && S.plan) {
+    syncSessionFromParsedDeck(parsed);
+    S.app = app;
+    S.cfg = cfg || S.cfg;
+    S.preset = app.preset;
+    S.PSet = CardMaker.PRESETS[app.preset];
+    return true;
+  }
+  const PSet = CardMaker.PRESETS[app.preset];
+  S = {
+    app,
+    cfg,
+    preset: app.preset,
+    PSet,
+    topic: app.title || "deck",
+    plan: {
+      title: app.title || "deck",
+      scene: "从当前已存在的 deck 恢复，用于继续补充和调整页面结构。",
+      theme: inferTheme(parsed.sections),
+      font: "",
+      pages: parsed.sections.map(sectionToPageSpec),
+    },
+    designStyle: parsed.style,
+    sections: parsed.sections,
+    nextIdx: -1,
+    aborted: false,
+    sampleIdx: 0,
+    sampleSection: "",
+  };
+  return true;
+}
+
+function syncSessionFromParsedDeck(parsed) {
+  if (parsed.style) S.designStyle = parsed.style;
+  const generated = [];
+  S.sections.forEach((sec, i) => { if (sec) generated.push(i); });
+  parsed.sections.forEach((sec, viewIdx) => {
+    const sourceIdx = generated[viewIdx] != null ? generated[viewIdx] : viewIdx;
+    S.sections[sourceIdx] = sec;
+  });
+}
+
+function parseDeckHTML(html) {
+  const doc = new DOMParser().parseFromString(html || "", "text/html");
+  const style = Array.from(doc.body.querySelectorAll("style")).map((n) => n.outerHTML).join("\n");
+  const sections = Array.from(doc.body.querySelectorAll("section.card")).map((n) => n.outerHTML);
+  return { style, sections };
+}
+
+function sectionToPageSpec(sectionHTML, idx) {
+  const doc = new DOMParser().parseFromString(sectionHTML || "", "text/html");
+  const card = doc.body.querySelector("section");
+  const role = card && card.getAttribute("data-role") || (idx === 0 ? "cover" : "content");
+  const titleEl = card && (card.querySelector("h1,h2,.cm-display,.cm-title") || card.querySelector(".cm-main"));
+  const title = compactText(titleEl ? titleEl.textContent : "") || "第 " + (idx + 1) + " 页";
+  const content = Array.from(card ? card.querySelectorAll("p,li,.cm-cell,.cm-stat-label") : [])
+    .map((n) => compactText(n.textContent))
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((text) => ({ heading: "", text }));
+  return { role, title, subtitle: "", content };
+}
+
+function inferTheme(sections) {
+  for (let i = 0; i < sections.length; i++) {
+    const doc = new DOMParser().parseFromString(sections[i] || "", "text/html");
+    const card = doc.body.querySelector("section");
+    const theme = card && card.getAttribute("data-theme");
+    if (theme) return theme;
+  }
+  return "";
+}
+
+function compactText(text) {
+  return String(text || "").replace(/\s+/g, " ").trim();
+}
+
+function mapSectionsToRevisedPlan(revised, oldSections) {
+  const total = revised.pages.length;
+  const sections = revised.pages.map((pg, i) => {
+    const id = String(pg.id || "");
+    const m = id.match(/^p(\d+)$/i);
+    const oldIdx = m ? parseInt(m[1], 10) - 1 : -1;
+    const sec = oldIdx >= 0 ? oldSections[oldIdx] : "";
+    return sec ? normalizeSectionPageNumber(sec, i + 1, total) : "";
+  });
+  return { sections, focusIdx: Math.max(0, sections.findIndex(Boolean)) };
+}
+
+function normalizeSectionPageNumber(section, pageNum, total) {
+  if (!section || typeof DOMParser === "undefined") return section;
+  const wanted = String(pageNum).padStart(2, "0") + "/" + String(total).padStart(2, "0");
+  const doc = new DOMParser().parseFromString(section, "text/html");
+  const card = doc.body.querySelector("section");
+  if (!card) return section;
+  const targets = card.querySelectorAll(".cm-footer span, .cm-footer, .cm-page, [class*=\"page\"], [class*=\"Page\"]");
+  targets.forEach((node) => {
+    const text = (node.textContent || "").trim();
+    if (/^\d{1,2}\s*\/\s*\d{1,2}$/.test(text)) node.textContent = wanted;
+  });
+  return card.outerHTML;
+}
+
+// 找到下一个尚未生成的原始页序号，用于把批量生成拆成逐页确认。
+function findNextPageIdx() {
+  if (!S || !S.plan || !S.plan.pages) return -1;
+  return S.plan.pages.findIndex((_, i) => !S.sections[i]);
+}
+
+// 取当前页之前最近一张已生成页面，给模型做视觉承接参考。
+function findPrevSection(idx) {
+  for (let i = idx - 1; i >= 0; i--) {
+    if (S.sections[i]) return S.sections[i];
+  }
+  return "";
+}
+
+function confirmedLayoutReference(excludeIdx) {
+  if (!S || !S.sections) return "";
+  const refs = [];
+  const coverIdx = S.plan ? pickCoverIdx(S.plan) : 0;
+  const sampleIdx = S.sampleIdx != null ? S.sampleIdx : pickSampleIdx(S.plan || { pages: [] });
+  [coverIdx, sampleIdx].forEach((idx) => {
+    if (idx !== excludeIdx && S.sections[idx] && !refs.some((r) => r.html === S.sections[idx])) refs.push({ idx, html: S.sections[idx] });
+  });
+  if (!refs.length) {
+    S.sections.some((sec, idx) => {
+      if (idx !== excludeIdx && sec) refs.push({ idx, html: sec });
+      return refs.length >= 2;
+    });
+  }
+  return namedReferenceHTML(refs.slice(0, 2));
+}
+
+function namedReferenceHTML(refs) {
+  return (refs || [])
+    .filter((ref) => ref && ref.html)
+    .map((ref) => "参考页：第 " + (ref.idx + 1) + " 页\n" + ref.html)
+    .join("\n\n")
+    .slice(0, 12000);
+}
+
+function deckReferenceHTML() {
+  if (!S || !S.sections) return "";
+  return S.sections
+    .filter(Boolean)
+    .slice(0, 4)
+    .map((sec, i) => "页面样例 " + (i + 1) + "：\n" + sec)
+    .join("\n\n")
+    .slice(0, 18000);
+}
+
+// 优先使用大纲里的 cover 页；模型偶发漏标时退回第一页。
+function pickCoverIdx(plan) {
+  const ps = plan.pages || [];
+  const i = ps.findIndex((p) => p.role === "cover");
+  return i >= 0 ? i : 0;
+}
+
+// 第一个内容页用来定正式样式，避免只看封面看不出版式密度。
 function pickSampleIdx(plan) {
   const ps = plan.pages || [];
   let i = ps.findIndex((p) => p.role === "content" || p.role === "data");
   return i >= 0 ? i : (ps.length > 1 ? 1 : 0);
 }
 
+// 生成下一页的确认动作：点击后立刻清空当前消息按钮，避免重复触发同一页生成。
+function nextPageAction(msgEl) {
+  return {
+    label: "确认，生成下一页",
+    primary: true,
+    onClick: () => {
+      if (msgEl) setMsgActions(msgEl, []);
+      runRender(S.app);
+    },
+  };
+}
+
+// 根据当前进度生成操作按钮：生成过程中只允许重做当前页或继续下一页，不在这里改整套风格。
+function renderProgressActions(total, sourceIdx, msgEl) {
+  const actions = [];
+  const idx = sourceIdx == null ? sourcePageIdxFromViewIdx(S.app.index) : sourceIdx;
+  if (idx >= 0 && idx < total && S.sections[idx]) {
+    actions.push({
+      label: "重新生成本页",
+      onClick: () => {
+        if (msgEl) setMsgActions(msgEl, []);
+        regeneratePage(S.app, idx);
+      },
+    });
+  }
+  if (findNextPageIdx() >= 0) actions.push(nextPageAction(msgEl));
+  return actions;
+}
+
+// 使用既有 plan/designStyle 重新渲染某一页，适合生成过程中当前页不满意时快速重做。
+async function regeneratePage(app, sourceIdx) {
+  if (!S || !S.plan || !S.sections[sourceIdx]) return;
+  const job = beginJob();
+  S.cfg = cfgWithSignal(S.cfg, job);
+  const total = S.plan.pages.length;
+  const m = streamMsg();
+  try {
+    m.setText("正在重新生成第 " + (sourceIdx + 1) + " / " + total + " 页…");
+    const prev = findPrevSection(sourceIdx);
+    const sec = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle,
+      S.plan.pages[sourceIdx], prev, sourceIdx + 1, total, confirmedLayoutReference(sourceIdx));
+    S.sections[sourceIdx] = sec;
+    applySections(app);
+    app.goTo(Math.max(0, viewIdxFromSourcePageIdx(sourceIdx)));
+    m.done();
+    m.setHtml("第 " + (sourceIdx + 1) + " / " + total + " 页已重新生成，请确认左侧画布。");
+    setMsgActions(m.el, renderProgressActions(total, sourceIdx, m.el));
+    endJob(job);
+  } catch (e) {
+    m.done();
+    m.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
+    endJob(job);
+  }
+}
+
 function extractStyleFromDeck(app) {
   return extractStyle(app.getHTML());
+}
+
+// 获取可被导出或继续编辑的全局样式；没有显式 <style> 时，从当前渲染效果生成一份快照。
+function currentDesignStyle(app) {
+  return (S && S.designStyle) || extractStyleFromDeck(app) || styleSnapshotFromDeck(app);
+}
+
+// 从当前卡片的计算样式生成可复用的 deck 级 <style>，覆盖内置样式但不依赖单页私有样式。
+function styleSnapshotFromDeck(app) {
+  const card = (app.cards && (app.cards[app.index] || app.cards[0])) || null;
+  if (!card || typeof getComputedStyle === "undefined") return "";
+  const cardCS = getComputedStyle(card);
+  const headerCS = computedOf(card, ".cm-header") || cardCS;
+  const footerCS = computedOf(card, ".cm-footer") || cardCS;
+  const titleCS = computedOf(card, "h1,h2,.cm-title,.cm-display") || cardCS;
+  const textCS = computedOf(card, "p,li,.cm-lead") || cardCS;
+  const css = [
+    "/* CardMaker style snapshot: exported from the current rendered deck. */",
+    ":root {",
+    cssVar("--cm-card-bg", cssBackground(cardCS)),
+    cssVar("--cm-bg", cardCS.backgroundColor),
+    cssVar("--cm-fg", cardCS.color),
+    cssVar("--cm-muted", footerCS.color || headerCS.color),
+    cssVar("--cm-line", borderColor(footerCS) || borderColor(headerCS) || "rgba(0,0,0,.16)"),
+    cssVar("--cm-h1", titleCS.fontSize),
+    cssVar("--cm-h2", titleCS.fontSize),
+    cssVar("--cm-h3", textCS.fontSize),
+    cssVar("--cm-text", textCS.fontSize),
+    "}",
+    ".card {",
+    "  background: var(--cm-card-bg);",
+    "  color: var(--cm-fg);",
+    "  font-family: " + cardCS.fontFamily + ";",
+    "}",
+    ".cm-header, .cm-footer {",
+    "  color: var(--cm-muted);",
+    "  font-size: " + headerCS.fontSize + ";",
+    "  letter-spacing: " + headerCS.letterSpacing + ";",
+    "}",
+    ".cm-footer { border-top: 1px solid var(--cm-line); }",
+    "h1, h2, .cm-title, .cm-display {",
+    "  color: " + titleCS.color + ";",
+    "  font-family: " + titleCS.fontFamily + ";",
+    "  font-weight: " + titleCS.fontWeight + ";",
+    "  line-height: " + titleCS.lineHeight + ";",
+    "}",
+    "p, li, .cm-lead {",
+    "  color: " + textCS.color + ";",
+    "  font-family: " + textCS.fontFamily + ";",
+    "  font-size: var(--cm-text);",
+    "  line-height: " + textCS.lineHeight + ";",
+    "}",
+  ].filter(Boolean).join("\n");
+  return "<style>\n" + css + "\n</style>";
+}
+
+function computedOf(root, selector) {
+  const node = root.querySelector(selector);
+  return node ? getComputedStyle(node) : null;
+}
+
+function cssBackground(cs) {
+  const image = cs.backgroundImage && cs.backgroundImage !== "none" ? cs.backgroundImage : "";
+  return image ? image + ", " + cs.backgroundColor : cs.backgroundColor;
+}
+
+function cssVar(name, value) {
+  return value ? "  " + name + ": " + value + ";" : "";
+}
+
+function borderColor(cs) {
+  return cs && cs.borderTopColor && cs.borderTopStyle !== "none" ? cs.borderTopColor : "";
 }
 
 function formatPlan(plan) {
@@ -355,9 +1387,9 @@ function injectStyles() {
   const css =
     // ── 右侧 AI 面板 ──
     ".cm-ai-panel{flex:none;width:320px;display:flex;flex-direction:column;border-left:1px solid rgba(255,255,255,.08);background:#0e0f13;font-family:var(--cm-font-sans,system-ui);color:#e9e9ee;overflow:hidden}" +
-    ".cm-ai-head{flex:none;display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.07)}" +
+    ".cm-ai-head{flex:none;display:flex;align-items:center;gap:6px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.07)}" +
     ".cm-ai-brand{font-weight:600;font-size:14px;flex:1}" +
-    ".cm-ai-head .cm-btn{padding:5px 10px;font-size:12px}" +
+    ".cm-ai-head .cm-btn{padding:5px 8px;font-size:12px}" +
     ".cm-ai-msgs{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px}" +
     // ── 消息气泡 ──
     ".cm-msg{display:flex;flex-direction:column;gap:6px;max-width:100%}" +
@@ -382,13 +1414,31 @@ function injectStyles() {
     ".cm-plan li{margin-bottom:2px}" +
     // ── 底部输入区 ──
     ".cm-ai-foot{flex:none;padding:10px 14px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:8px}" +
-    ".cm-ai-opts{display:flex;gap:8px}" +
-    ".cm-ai-opts .cm-select{flex:1;font-size:12px;padding:5px 8px}" +
-    ".cm-ai-pages{width:56px;background:#0a0b0e;color:#e9e9ee;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:5px 8px;font:inherit;font-size:12px;outline:none;text-align:center}" +
-    ".cm-ai-input-wrap{display:flex;gap:8px;align-items:flex-end}" +
-    ".cm-ai-input{flex:1;background:#0a0b0e;color:#e9e9ee;border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:9px 11px;font:inherit;font-size:13px;line-height:1.5;resize:none;outline:none;min-height:60px}" +
+    ".cm-ai-quick-menu{position:relative;display:flex;align-items:center;justify-content:flex-start;gap:6px;flex-wrap:wrap}" +
+    ".cm-ai-quick-trigger{font-size:12px;padding:5px 10px;color:#d4d9e8;background:rgba(255,255,255,.045);border-color:rgba(255,255,255,.1)}" +
+    ".cm-ai-style-attach{font-size:12px;padding:5px 10px;color:#d4d9e8;background:rgba(255,255,255,.045);border-color:rgba(255,255,255,.1)}" +
+    ".cm-ai-style-status{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 7px;border-radius:999px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.035);font-size:12px;line-height:1.25;color:#8f96a6}" +
+    ".cm-ai-style-status[hidden]{display:none}" +
+    ".cm-ai-style-status[data-state='ready']{color:#a7f3d0;background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.24)}" +
+    ".cm-ai-style-status[data-state='error']{color:#fecaca;background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.24)}" +
+    ".cm-ai-style-dot{width:6px;height:6px;border-radius:50%;background:#6b7280;flex:none}" +
+    ".cm-ai-style-status[data-state='ready'] .cm-ai-style-dot{background:#10b981}" +
+    ".cm-ai-style-status[data-state='error'] .cm-ai-style-dot{background:#ef4444}" +
+    ".cm-ai-style-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
+    ".cm-ai-style-clear{flex:none;background:transparent;border:0;color:inherit;font:inherit;font-size:12px;padding:0 1px;cursor:pointer;opacity:.82}" +
+    ".cm-ai-style-clear:hover{opacity:1;text-decoration:underline}" +
+    ".cm-ai-quick-pop{position:absolute;left:0;bottom:34px;z-index:5;width:260px;display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:#16181d;border:1px solid rgba(255,255,255,.12);border-radius:10px;box-shadow:0 18px 45px rgba(0,0,0,.38)}" +
+    ".cm-ai-quick-pop[hidden]{display:none}" +
+    ".cm-ai-quick-pop .cm-btn{font-size:12px;padding:5px 9px;color:#d4d9e8;background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.1);white-space:normal;text-align:left}" +
+    ".cm-ai-input-wrap{position:relative}" +
+    ".cm-ai-input{display:block;width:100%;box-sizing:border-box;background:#0a0b0e;color:#e9e9ee;border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:9px 48px 12px 11px;font:inherit;font-size:13px;line-height:1.5;resize:none;outline:none;min-height:72px}" +
     ".cm-ai-input:focus{border-color:var(--cm-accent,#6d6df0)}" +
-    ".cm-ai-send{flex:none;padding:9px 13px;font-size:16px;line-height:1}" +
+    ".cm-ai-send{position:absolute;right:10px;bottom:10px;width:30px;height:30px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(0,0,0,.26);transition:transform .14s ease,filter .14s ease,background .14s ease}" +
+    ".cm-ai-send:hover{transform:translateY(-1px);filter:brightness(1.08)}" +
+    ".cm-ai-send:active{transform:translateY(0) scale(.96)}" +
+    ".cm-ai-send::before{content:\"\";width:0;height:0;border-left:9px solid #fff;border-top:6px solid transparent;border-bottom:6px solid transparent;transform:translateX(1px)}" +
+    ".cm-ai-send.is-stop{background:#ef4444;color:#fff}" +
+    ".cm-ai-send.is-stop::before{width:10px;height:10px;border:0;border-radius:2px;background:#fff;transform:none}" +
     // ── 设置弹窗（复用 cmai 样式） ──
     ".cmai-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);z-index:200;display:none;align-items:center;justify-content:center}" +
     ".cmai-mask.is-open{display:flex}" +

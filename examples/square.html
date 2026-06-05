@@ -3,26 +3,96 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>21 天习惯（方形示例）</title>
+  <title>灵感收纳术（方形示例）</title>
   <link rel="stylesheet" href="../cardmaker.css" />
 </head>
 <body>
-  <!-- 方形 1:1 示例：大数据封面 + 金句页。整套同一主题 mint。 -->
-  <div data-cardmaker data-preset="square" data-title="21天习惯">
+  <!-- 方形 1:1 示例：适合社交平台信息图，展示封面与正文矩阵两种排版。 -->
+  <div data-cardmaker data-preset="square" data-title="灵感收纳术" data-font="hei">
+    <style>
+      .cm-square-demo {
+        --cm-card-bg: #f8fafc;
+        --cm-fg: #14213d;
+        --cm-muted: #64748b;
+        --cm-accent: #0f766e;
+        --cm-accent-fg: #ecfeff;
+        --cm-line: rgba(15, 118, 110, 0.16);
+        --cm-pad: 78px;
+        --cm-gap: 24px;
+        --cm-radius: 22px;
+      }
+      .cm-square-demo .cm-header,
+      .cm-square-demo .cm-footer { color: #64748b; border-color: rgba(20, 33, 61, 0.1); }
+      .cm-square-demo .cm-main { gap: 28px; }
+      .cm-square-demo .cm-kicker { color: var(--cm-accent); font-weight: 800; }
+      .cm-square-demo .cm-display { max-width: 760px; font-size: 92px; line-height: 1.08; }
+      .cm-square-demo .cm-lead { max-width: 720px; font-size: 30px; line-height: 1.55; color: #334155; }
+      .cm-square-demo .cm-tag { border-radius: 999px; box-shadow: none; }
+      .cm-square-demo .cm-grid { gap: 18px; }
+      .cm-square-demo .cm-cell {
+        min-height: 210px;
+        padding: 24px;
+        background: rgba(255, 255, 255, 0.76);
+        border: 1px solid rgba(15, 118, 110, 0.18);
+        border-radius: 18px;
+        box-shadow: 0 16px 40px rgba(20, 33, 61, 0.08);
+        justify-content: flex-start;
+      }
+      .cm-square-demo .cm-cell h3 { color: #0f172a; font-size: 30px; line-height: 1.25; }
+      .cm-square-demo .cm-cell p { color: #475569; font-size: 23px; line-height: 1.5; }
+      .cm-square-demo .cm-num {
+        width: 54px;
+        height: 54px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 16px;
+        background: #ccfbf1;
+        color: #0f766e;
+        font-size: 28px;
+        font-weight: 900;
+      }
+    </style>
 
-    <!-- 大数据封面：超大数字 + 单位下标 -->
-    <section class="card cm-middle cm-text-center" data-theme="mint">
-      <div class="cm-kicker">数据说话</div>
-      <div class="cm-stat-num" style="font-size:200px">21<span style="font-size:.4em">天</span></div>
-      <p class="cm-lead">一个习惯成型的周期。</p>
-      <div class="cm-footer"><span>@CardMaker</span><span>每日精进</span></div>
+    <section class="card cm-square-demo cm-middle" data-theme="light">
+      <div class="cm-kicker">Square Card Demo</div>
+      <h1 class="cm-display">灵感<br />收纳术</h1>
+      <p class="cm-lead cm-mt">把零散想法整理成可执行的内容清单，适合做社交平台知识卡。</p>
+      <div class="cm-mt-lg"><span class="cm-tag">收藏夹 → 主题库 → 发布计划</span></div>
+      <div class="cm-footer"><span>CardMaker Example</span><span>01 / 02</span></div>
     </section>
 
-    <!-- 金句页：大引号 + 出处 -->
-    <section class="card cm-middle" data-theme="mint">
-      <div class="cm-quote-mark">"</div>
-      <div class="cm-quote-text">你如何度过一天，<br>就如何度过一生。</div>
-      <p class="cm-muted cm-mt">— 安妮·迪拉德</p>
+    <section class="card cm-square-demo" data-theme="light">
+      <div class="cm-header"><div>灵感从哪里来</div><div class="cm-sm">02 / 02</div></div>
+      <div class="cm-main">
+        <div class="cm-titlebar">
+          <div class="cm-kicker">3 个入口</div>
+          <h2 class="cm-title">别等灵感，先建系统</h2>
+        </div>
+        <div class="cm-grid">
+          <div class="cm-cell">
+            <div class="cm-num">1</div>
+            <h3>记录问题</h3>
+            <p>把用户追问、评论区高频疑惑和自己的卡点放进同一个池子。</p>
+          </div>
+          <div class="cm-cell">
+            <div class="cm-num">2</div>
+            <h3>归类主题</h3>
+            <p>按人群、场景、方法、误区分组，避免素材越存越乱。</p>
+          </div>
+          <div class="cm-cell">
+            <div class="cm-num">3</div>
+            <h3>排成计划</h3>
+            <p>每周只挑一个主题，连续拆成观点、清单、案例三类卡片。</p>
+          </div>
+          <div class="cm-cell">
+            <div class="cm-num">4</div>
+            <h3>复盘表现</h3>
+            <p>保留互动高的表达方式，下次直接复用标题结构和内容角度。</p>
+          </div>
+        </div>
+      </div>
+      <div class="cm-footer"><span>CardMaker Example</span><span>02 / 02</span></div>
     </section>
 
   </div>

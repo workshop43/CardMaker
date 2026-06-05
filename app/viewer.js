@@ -156,12 +156,21 @@
     this._fit();
   };
 
-  // 每卡按 data-font（优先）或 deck 级默认懒加载并设到 --cm-font-sans
+  // deck 级 data-font 是整套字体契约；没有 deck 字体时才允许单卡 data-font。
   Viewer.prototype._applyFonts = function () {
     var self = this;
     this.cards.forEach(function (c) {
-      var key = c.getAttribute("data-font") || self.font;
-      if (key && FONTS[key]) { ensureFont(key); c.style.setProperty("--cm-font-sans", FONTS[key].family); }
+      var key = self.font || c.getAttribute("data-font") || "";
+      if (key && FONTS[key]) {
+        ensureFont(key);
+        c.setAttribute("data-cm-font-lock", key);
+        c.style.setProperty("--cm-font-sans", FONTS[key].family, "important");
+        c.style.setProperty("--cm-font-serif", FONTS[key].family, "important");
+      } else {
+        c.removeAttribute("data-cm-font-lock");
+        c.style.removeProperty("--cm-font-sans");
+        c.style.removeProperty("--cm-font-serif");
+      }
     });
   };
 
