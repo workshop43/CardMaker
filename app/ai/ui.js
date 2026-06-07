@@ -884,8 +884,10 @@ async function doStyleEdit(app, feedback) {
     app.patchDeck({ style: r.style });
     cleanupInlineStylesCoveredByDeckStyle(app, r.style);
     app.setHTML(app.getHTML());
+    if (r.theme) applyDeckTheme(app, r.theme);
     if (r.font) app.setFont(r.font);
     if (S) S.designStyle = r.style;
+    if (S && S.plan && r.theme) S.plan.theme = r.theme;
     refreshSessionSectionsFromDeck(app);
     m.done(); m.setHtml("整套风格已更新，请查看画布。");
     endJob(job);
@@ -918,6 +920,22 @@ function cleanupInlineStylesCoveredByDeckStyle(app, styleText) {
       changed += covered.length;
     });
   });
+  return changed;
+}
+
+// deck 级主题是跨页视觉契约：整套风格修改返回 theme 后，所有已生成页面必须同步 data-theme。
+function applyDeckTheme(app, theme) {
+  if (!theme || !app || !app.cards || !app.cards.length) return 0;
+  let changed = 0;
+  app.cards.forEach((card) => {
+    if (!card || card.getAttribute("data-theme") === theme) return;
+    card.setAttribute("data-theme", theme);
+    changed++;
+  });
+  if (changed) {
+    app.refresh();
+    refreshSessionSectionsFromDeck(app);
+  }
   return changed;
 }
 

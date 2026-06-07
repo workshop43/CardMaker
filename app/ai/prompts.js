@@ -146,7 +146,7 @@ export function intentPrompt(context, text) {
     "- edit_page：只改变一个页面",
     "- edit_pages：改变多个页面，但不改变页面清单",
     "- edit_content：定向修改已有页面里的文字、元素属性、元素 class，或某个具体元素实例的局部排版属性，不重绘页面",
-    "- edit_global_style：改变 deck 级 <style>、selector/class 规则、视觉系统或跨页组件规范",
+    "- edit_global_style：改变 deck 级 <style>、selector/class 规则、视觉系统、跨页组件规范，或改变整套主题/data-theme",
     "- edit_structure：改变页面清单本身",
     "- unknown：当前上下文不足以判断",
     "",
@@ -334,6 +334,7 @@ export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML
     "【保留 .cm-header / .cm-main / .cm-footer 的常规流结构，别给它们加 position:absolute】——只改视觉（配色/字体/线条/质感），别动版面结构，否则各页会对不齐。",
     "不要输出 <section>，不要把 class 级样式分散写进每页 section 的 style 属性。",
     "若换中文字体：在 <style> 之前单独输出一行 <!--FONT key-->（key 从 " + FONTS + " 里选）。",
+    "若整套需要切换内置主题 key：在 <style> 之前单独输出一行 <!--THEME key-->（key 从 " + THEMES + " 里选）。这会由执行层统一写到所有页面的 data-theme。",
     "",
     mediumBlock(preset, P),
     canvasBlock(preset, P),
@@ -343,7 +344,7 @@ export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML
     TOKENS,
     contextBlock(context),
     "",
-    "【只输出修改后的完整 <style>…</style>（若换字体则其前面加一行 <!--FONT key-->），不要 <section>、不要解释文字、不要 ``` 围栏。】",
+    "【只输出修改后的完整 <style>…</style>（若换字体/主题则其前面加 <!--FONT key--> / <!--THEME key-->），不要 <section>、不要解释文字、不要 ``` 围栏。】",
   ].join("\n");
   const user = [
     "当前全局 <style>：\n" + currentStyle,

@@ -214,14 +214,18 @@ export async function revisePlanStructure(cfg, plan, feedback, currentPageNum, c
   return parsePlan(text);
 }
 
-// 6) 整套样式修改：改全局 <style>，返回 { style, font }（font 为可选的 data-font key）
+const THEME_KEYS = new Set("light dark warm ink mint gradient ocean sky sunset forest paper bold pastel tech cream night".split(" "));
+
+// 6) 整套样式修改：改全局 <style>，返回 { style, font, theme }（font/theme 为可选 key）
 export async function editStyle(cfg, preset, P, currentStyle, feedback, deckReferenceHTML, context, onStream) {
   const run = () => {
     const { sys, user } = stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML, context);
     const [onDelta, onThink] = adapt(onStream);
     return callModel(cfg, sys, user, onDelta, onThink).then((text) => {
       const fontM = text.match(/<!--\s*FONT\s+([a-z]+)\s*-->/i);
-      return { style: extractStyle(text), font: fontM ? fontM[1] : null };
+      const themeM = text.match(/<!--\s*THEME\s+([a-z]+)\s*-->/i);
+      const theme = themeM && THEME_KEYS.has(themeM[1]) ? themeM[1] : null;
+      return { style: extractStyle(text), font: fontM ? fontM[1] : null, theme };
     });
   };
   return withRetry(run, (r) => !!r.style, "未返回 <style>，已重试仍失败。");
