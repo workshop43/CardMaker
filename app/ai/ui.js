@@ -34,7 +34,9 @@ function buildPanel(app) {
       '<div class="cm-ai-quick-menu">' +
         '<button class="cm-btn cm-ai-quick-trigger" type="button">快捷</button>' +
         '<button class="cm-btn cm-ai-style-attach" type="button">上传样式</button>' +
+        '<button class="cm-btn cm-ai-md-attach" type="button">上传 MD</button>' +
         '<input class="cm-ai-style-file" type="file" accept=".css,.txt,.html,text/css,text/plain,text/html" hidden />' +
+        '<input class="cm-ai-md-file" type="file" accept=".md,.markdown,text/markdown,text/plain" hidden />' +
         '<div class="cm-ai-style-status" data-state="empty" hidden>' +
           '<span class="cm-ai-style-dot"></span>' +
           '<span class="cm-ai-style-text"></span>' +
@@ -60,6 +62,7 @@ function buildPanel(app) {
     wrap, msgs: wrap.querySelector(".cm-ai-msgs"),
     input: wrap.querySelector(".cm-ai-input"), send: wrap.querySelector(".cm-ai-send"),
     styleFile: wrap.querySelector(".cm-ai-style-file"),
+    mdFile: wrap.querySelector(".cm-ai-md-file"),
     styleStatus: wrap.querySelector(".cm-ai-style-status"),
     styleText: wrap.querySelector(".cm-ai-style-text"),
     styleClear: wrap.querySelector(".cm-ai-style-clear"),
@@ -70,7 +73,9 @@ function buildPanel(app) {
   const quickPop = wrap.querySelector(".cm-ai-quick-pop");
   wrap.querySelector(".cm-ai-quick-trigger").onclick = (e) => { e.stopPropagation(); quickPop.hidden = !quickPop.hidden; };
   wrap.querySelector(".cm-ai-style-attach").onclick = () => P.styleFile.click();
+  wrap.querySelector(".cm-ai-md-attach").onclick = () => P.mdFile.click();
   P.styleFile.onchange = () => importStyleFile(app, P.styleFile);
+  P.mdFile.onchange = () => importMarkdownFile(app, P.mdFile);
   P.styleClear.onclick = () => {
     uploadedStyle = null;
     updateUploadedStyleUI();
@@ -117,7 +122,23 @@ function clearStageForNewDeck(app) {
   addAIMsg("画布已清空。现在输入主题会生成新的 deck。");
 }
 
-// 处理工具栏上传的 Markdown：把文档内容作为资料，直接生成 PPT 16:9 deck。
+// 从 AI 面板上传 Markdown，读取后交给运行时事件入口，保持和外部调用同一路径。
+function importMarkdownFile(app, input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    input.value = "";
+    app.importMarkdown(String(reader.result || ""), file.name);
+  };
+  reader.onerror = () => {
+    input.value = "";
+    addAIMsg("读取 Markdown 文件失败。");
+  };
+  reader.readAsText(file);
+}
+
+// 处理 Markdown 导入事件：把文档内容作为资料，直接生成 PPT 16:9 deck。
 function handleMarkdownImport(app, event) {
   if (!event || !event.detail) return;
   event.preventDefault();
