@@ -237,13 +237,13 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.presetSel.onchange = function () { self.loadExample(self.presetSel.value); };
     this.btnEdit = el("button", "cm-btn", "编辑");
     this.btnPresent = el("button", "cm-btn", "放映");
-    this.btnImport = el("button", "cm-btn", "导入 HTML");
+    this.btnImport = el("button", "cm-btn", "导入 HTML/MD");
     this.btnSave = el("button", "cm-btn", "导出 HTML");
     this.btnExport = el("button", "cm-btn", "当前页导出 PNG");
     this.btnExportAll = el("button", "cm-btn cm-primary", "打包导出 PNG");
     this.fileImport = el("input");
     this.fileImport.type = "file";
-    this.fileImport.accept = ".html,.htm,text/html";
+    this.fileImport.accept = ".html,.htm,.md,.markdown,text/html,text/markdown,text/plain";
     this.fileImport.className = "cm-file-input";
     if (!this.view) { // 浏览模式不要这些编辑/导出按钮
       bar.appendChild(this.btnEdit);
@@ -423,13 +423,27 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var reader = new FileReader();
     reader.onload = function () {
       self.fileImport.value = "";
-      self.importHTML(String(reader.result || ""), file.name);
+      var text = String(reader.result || "");
+      if (isMarkdownFile(file)) self.importMarkdown(text, file.name);
+      else self.importHTML(text, file.name);
     };
     reader.onerror = function () {
       self.fileImport.value = "";
       self._toast("读取文件失败");
     };
     reader.readAsText(file);
+  };
+
+  // Markdown 文件由 AI 模块消费：核心运行时只负责读取文件并派发事件，避免耦合 LLM 流程。
+  CardMaker.prototype.importMarkdown = function (markdown, filename) {
+    var ev = new CustomEvent("cardmaker:markdown-import", {
+      bubbles: true,
+      cancelable: true,
+      detail: { markdown: String(markdown || ""), filename: filename || "deck.md", app: this },
+    });
+    this.app.dispatchEvent(ev);
+    if (!ev.defaultPrevented) this._toast("Markdown 生成 PPT 需要启用 AI 助手");
+    return ev.defaultPrevented;
   };
 
   // 把完整 HTML 文档或 deck 片段导入当前运行时，保留原 deck 的比例、标题、字体和卡片源码。
@@ -453,6 +467,12 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this._toast("已打开 " + title);
     return true;
   };
+
+  // 判断用户上传的是 Markdown 文件；MIME 在不同系统里不稳定，因此以扩展名为主。
+  function isMarkdownFile(file) {
+    var name = (file && file.name) || "";
+    return /\.(md|markdown)$/i.test(name) || /markdown/i.test((file && file.type) || "");
+  }
 
   // 保存为自包含 HTML 文件：同源的 cardmaker.css/js 内联进去，双击即可打开、再编辑、再出图
   CardMaker.prototype.downloadHTML = function () {

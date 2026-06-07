@@ -17,6 +17,7 @@ let uploadedStyle = null; // 当前 conversation 附加的样式 { name, style }
 export function mountAI(app) {
   injectStyles();
   buildPanel(app);
+  app.app.addEventListener("cardmaker:markdown-import", (e) => handleMarkdownImport(app, e));
 }
 
 // ─── 面板构建 ─────────────────────────────────────────────────────────────────
@@ -114,6 +115,50 @@ function clearStageForNewDeck(app) {
   S = null;
   app.setHTML("");
   addAIMsg("画布已清空。现在输入主题会生成新的 deck。");
+}
+
+// 处理工具栏上传的 Markdown：把文档内容作为资料，直接生成 PPT 16:9 deck。
+function handleMarkdownImport(app, event) {
+  if (!event || !event.detail) return;
+  event.preventDefault();
+  const cfg = resolveCfg();
+  if (!cfg) {
+    addAIMsg("已读取 Markdown，但需要先点击右上角 ⚙ 配置 API Key，才能根据文档生成 PPT。");
+    openSettings(app);
+    return;
+  }
+  if (activeJob) stopActiveJob();
+  const filename = event.detail.filename || "deck.md";
+  const markdown = String(event.detail.markdown || "").trim();
+  if (!markdown) {
+    addAIMsg("Markdown 文件内容为空。");
+    return;
+  }
+  S = null;
+  app.setPreset("ppt");
+  app.title = markdownTitle(filename);
+  app.setHTML("");
+  addUserMsg("上传 Markdown：" + filename);
+  runGenerate(app, cfg, markdownToPptTopic(markdown, filename));
+}
+
+// 从 Markdown 文件名生成可读标题，避免把扩展名带进导出的文件名。
+function markdownTitle(filename) {
+  return String(filename || "Markdown PPT")
+    .replace(/\.(md|markdown)$/i, "")
+    .trim() || "Markdown PPT";
+}
+
+// 把 Markdown 原文封装成生成任务；内容结构、页数和视觉由后续 plan/design 流程自行判断。
+function markdownToPptTopic(markdown, filename) {
+  return [
+    "根据下面上传的 Markdown 文件内容，制作一套 PPT 16:9 演示 deck。",
+    "文件名：" + (filename || "deck.md"),
+    "要求：保留 Markdown 的核心观点和层级结构，整理成适合演示的连续页面；不要逐字堆砌，按内容信息量自行决定页数；输出面向演示阅读的标题、要点和案例。",
+    "",
+    "Markdown 原文：",
+    markdown,
+  ].join("\n");
 }
 
 // ─── 消息操作 ─────────────────────────────────────────────────────────────────
