@@ -17,7 +17,7 @@ const FONTS = "hei(现代黑) song(编辑宋) kai(文学楷) smiley(潮流标题
 function mediumBlock(preset, P) {
   if (preset === "story") {
     return "这是一套【微信公众号图文排版】：" + P.label + "，预览画布 " + P.w + "×" + P.h +
-      "px。最终会复制为微信公众号编辑器可识别的 HTML 片段；预览区模拟公众号正文编辑区，标题属于公众号后台单独字段，不放进正文预览。内容应像一篇可连续阅读的公众号文章正文：导语、小标题、段落、重点卡片/引用/分隔，而不是全屏海报。视觉、排版、字号、配色完全由你做主。";
+      "px。最终会复制为微信公众号编辑器可识别的 HTML 片段；预览区模拟公众号正文编辑区，标题属于公众号后台单独字段，不放进正文预览。内容应像一篇可连续阅读的公众号文章正文：导语、小标题、段落、重点卡片/引用/分隔，而不是全屏海报。整体排版偏简约、清爽、可读，避免过多修饰和大面积背景色；视觉、排版、字号、配色由你根据内容决定。";
   }
   const seen = preset === "ppt" ? "在投影 / 大屏上看" : "发社交平台、在手机上看（会被缩小）";
   return "这是一张【要导出成图片】的固定尺寸版面：" + P.label + "，精确 " + P.w + "×" + P.h +
@@ -44,6 +44,8 @@ function canvasBlock(preset, P) {
       "- 主体内容放进 .cm-main；不要在 .cm-main 里输出文章主标题，直接从正文导语/段落/小标题开始。",
       "- 预览可以用 data-theme=\"light\" / \"dark\" 模拟公众号亮色/暗色阅读颜色；整篇文章外层和 .cm-main 不要加背景色。",
       "- 正文组件可以使用背景、渐变和阴影，但必须兼容 light/dark：默认正文、次要文字、边框、普通组件底色、阴影可使用 --cm-fg / --cm-muted / --cm-line / --cm-surface / --cm-surface-strong / --cm-shadow 等变量自适应；具有明确设计含义的强调字色/装饰色可以使用具体色值，但要在亮色和暗色阅读背景上都清晰可读。",
+      "- 公众号复制 HTML 主要依赖 inline style；不要用 ::before / ::after 承载关键图标、编号、分割线、装饰文字或列表符号，必须用真实 DOM 节点（span/div/section）表达。",
+      "- 设计倾向简约：少用复杂图标分割线、重阴影、大色块和密集装饰；优先用留白、字号、行距、细线、轻量强调色建立层级。",
       "- 禁止 <html>/<head>/<body>、``` 围栏、解释文字、<script>、外链图片/字体/CSS。换字体用 data-font（" + FONTS + "）。",
       TOKENS,
     ].join("\n");
@@ -85,6 +87,7 @@ function layoutBlock(preset) {
       "- 不要输出 .cm-header / .cm-footer / .cm-page；公众号文章没有卡片页眉、页脚和页码。",
       "- .cm-main 里从上到下组织：导语、章节、小标题、段落、引用、重点块、分隔等文章模块；不要放文章主标题。",
       "- 这是单篇长页面，不要拆页，也不要设计成全屏海报。",
+      "- 列表和分隔模块要用真实元素排版，不要依赖 list-style 或伪元素；图标与文字同一行时用真实 span 并控制 white-space / line-height，避免复制到公众号后异常折行。",
     ].join("\n");
   }
   return LAYOUT;
@@ -115,6 +118,8 @@ function componentPolicy(preset) {
       "- 不要定义或使用 header/footer/page number 这类卡片 chrome。",
       "- 整篇文章外层和 .cm-main 不使用背景色；重点块、引用、卡片等局部组件可以有背景、渐变、阴影。默认中性色可用 light/dark 兼容变量自适应；有明确设计意图的强调色可以写成具体色值，但必须在 light/dark 预览下都可读。",
       "- 视觉系统集中在 deck 级 <style>，正文组件可通过语义 class 复用。",
+      "- 不要使用 ::before / ::after 做关键视觉；公众号导出的关键分隔线、图标、序号、列表符号都必须是正文里的真实 DOM。",
+      "- 整体设计克制，局部组件可以有轻量背景/渐变/阴影，但不要让文章看起来像多张卡片堆叠或海报拼贴。",
       "- 可以自行设计 DOM 结构和正文组件组合；最终要像一篇可复制到公众号编辑器的长文。",
     ].join("\n");
   }
@@ -306,7 +311,7 @@ export function editPrompt(preset, P, designStyle, currentHTML, feedback, pageNu
     "【模式：单页修改】修改一套卡片 deck 里的【第 " + pageNum + " / " + total + " 页】——只能改这一页。",
     "返回当前页修改后的完整 <section>。",
     preset === "story"
-      ? "可以重组 .cm-main 内的文章正文结构、正文组件组合和信息层级；不要添加 header/footer/page number。"
+      ? "可以重组 .cm-main 内的文章正文结构、正文组件组合和信息层级；不要添加 header/footer/page number；不要用 ::before / ::after 做关键图标、分割线或列表符号，改用真实 DOM；整体保持简约可读。"
       : "可以重组本页 .cm-main 内的 DOM 结构、正文组件组合和信息层级；跨页 header/footer/page number 仍复用当前视觉系统。",
     "不要输出其他页面、整套大纲、解释文字或代码围栏。",
     "",
@@ -401,10 +406,10 @@ export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML
     "可调整配色 / 强调色、字体、组件外观、整体风格、跨页组件规范——设计判断由你做主。",
     COLOR_INTENT,
     preset === "story"
-      ? "可调整导语、段落、小标题、引用、重点块、分隔等正文组件的样式、间距、层级和密度一致性；不要引入 header/footer/page number；不要给整篇文章外层或 .cm-main 添加背景色；局部组件的背景、渐变、阴影必须兼容 light/dark。"
+      ? "可调整导语、段落、小标题、引用、重点块、分隔等正文组件的样式、间距、层级和密度一致性；不要引入 header/footer/page number；不要给整篇文章外层或 .cm-main 添加背景色；局部组件的背景、渐变、阴影必须兼容 light/dark；整体偏简约清爽，不要堆过多修饰。"
       : "可调整 header/footer/title/subtitle/page number/内容块/section label 等跨页组件的样式、间距、层级和密度一致性。",
     preset === "story"
-      ? "【保留 .cm-main 正文流结构】——只改视觉（配色/字体/线条/质感）和正文组件，不要新增 .cm-header / .cm-footer。"
+      ? "【保留 .cm-main 正文流结构】——只改视觉（配色/字体/线条/质感）和正文组件，不要新增 .cm-header / .cm-footer；不要用 ::before / ::after 做关键图标、分割线或列表符号，改用真实 DOM。"
       : "【保留 .cm-header / .cm-main / .cm-footer 的常规流结构，别给它们加 position:absolute】——只改视觉（配色/字体/线条/质感），别动版面结构，否则各页会对不齐。",
     "不要输出 <section>，不要把 class 级样式分散写进每页 section 的 style 属性。",
     "若换中文字体：在 <style> 之前单独输出一行 <!--FONT key-->（key 从 " + FONTS + " 里选）。",
