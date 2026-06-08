@@ -71,6 +71,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     jszip: "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
   };
   var EXPORT_TEXT_SCALE = 0.95;
+  var WECHAT_TEXT_SCALE = 1.08;
 
   // CodeMirror 5（编辑器，打开编辑面板时才懒加载；失败则退回 textarea）
   var CM_VER = "5.65.16";
@@ -526,7 +527,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
         "margin:" + (i ? "22px 0 0" : "0"),
         "padding:0",
         "color:" + safeColor(cardCS.color, "#1f2937"),
-        "font-size:" + roundPx(px(cardCS.fontSize) || 16) + "px",
+        "font-size:" + scaledWechatFont(px(cardCS.fontSize) || 16) + "px",
         "line-height:" + lineHeightValue(cardCS),
         "font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',Arial,sans-serif",
       ].join(";") + ";");
@@ -607,7 +608,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       "box-sizing:border-box",
       "display:" + wechatDisplay(tag, cs),
       "color:" + safeColor(cs.color, "#1f2937"),
-      "font-size:" + roundPx(font || 16) + "px",
+      "font-size:" + scaledWechatFont(font || 16) + "px",
       "line-height:" + lineHeightValue(cs),
       "font-weight:" + cs.fontWeight,
       "text-align:" + (isDecorationGroup(node) ? "center" : cs.textAlign),
@@ -907,6 +908,10 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
 
   function roundPx(value) {
     return Math.round(value * 10) / 10;
+  }
+
+  function scaledWechatFont(value) {
+    return roundPx(value * WECHAT_TEXT_SCALE);
   }
 
   function lineHeightValue(cs) {
