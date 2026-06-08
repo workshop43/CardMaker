@@ -276,8 +276,10 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       this.storyThemeToggle.appendChild(this.btnStoryLight);
       this.storyThemeToggle.appendChild(this.btnStoryDark);
       this.btnWechat = el("button", "cm-btn cm-primary", "复制公众号 HTML");
+      this.btnWechatBuffer = el("button", "cm-btn", "复制区");
       this.storyTools.appendChild(this.storyThemeToggle);
       this.storyTools.appendChild(this.btnWechat);
+      this.storyTools.appendChild(this.btnWechatBuffer);
       stage.appendChild(this.storyTools);
     }
 
@@ -322,6 +324,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.fileImport.onchange = function () { self._handleImportFile(self.fileImport.files && self.fileImport.files[0]); };
     this.btnSave.onclick = function () { self.downloadHTML(); };
     if (this.btnWechat) this.btnWechat.onclick = function () { self.copyWeChatHTML(); };
+    if (this.btnWechatBuffer) this.btnWechatBuffer.onclick = function () { self.openWeChatCopyBuffer(); };
     if (this.btnStoryLight) this.btnStoryLight.onclick = function () { self.setStoryTheme("light"); };
     if (this.btnStoryDark) this.btnStoryDark.onclick = function () { self.setStoryTheme("dark"); };
     this.textarea.addEventListener("input", function () { self._applyEditor(); });
@@ -490,7 +493,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var html = this.getWeChatHTML();
     var self = this;
     if (!html) { this._toast("没有可复制的内容"); return; }
-    if (copyRichHTMLFromDOM(html)) {
+    if (copyHTMLWithCopyEvent(html) || copyRichHTMLFromDOM(html)) {
       this._toast("已复制公众号富文本");
       return;
     }
@@ -501,6 +504,12 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
         self._toast("已复制 HTML 源码");
       }
     });
+  };
+
+  CardMaker.prototype.openWeChatCopyBuffer = function () {
+    var html = this.getWeChatHTML();
+    if (!html) { this._toast("没有可复制的内容"); return; }
+    showWeChatCopyBuffer(html);
   };
 
   // 输出适合粘贴到微信公众号编辑器的 HTML 片段。
@@ -671,6 +680,38 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     ta.remove();
   }
 
+  function copyHTMLWithCopyEvent(html) {
+    var marker = document.createElement("span");
+    marker.textContent = " ";
+    marker.style.cssText = "position:fixed;left:0;top:0;opacity:0;user-select:text;-webkit-user-select:text;";
+    document.body.appendChild(marker);
+    var sel = window.getSelection && window.getSelection();
+    var range = document.createRange();
+    var copied = false;
+    function onCopy(e) {
+      e.preventDefault();
+      if (!e.clipboardData) return;
+      e.clipboardData.setData("text/html", html);
+      e.clipboardData.setData("text/plain", htmlToPlainText(html));
+      copied = true;
+    }
+    document.addEventListener("copy", onCopy, true);
+    try {
+      range.selectNodeContents(marker);
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      document.execCommand("copy");
+    } catch (e) {
+      copied = false;
+    }
+    document.removeEventListener("copy", onCopy, true);
+    if (sel) sel.removeAllRanges();
+    marker.remove();
+    return copied;
+  }
+
   // 公众号编辑器对“从真实页面选中后复制”的富文本兼容性通常好于 ClipboardItem 写入的字符串。
   function copyRichHTMLFromDOM(html) {
     var host = document.createElement("div");
@@ -721,6 +762,44 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     }).catch(function () {
       return false;
     });
+  }
+
+  function showWeChatCopyBuffer(html) {
+    var mask = el("div", "cm-wechat-copy-mask");
+    var panel = el("div", "cm-wechat-copy-panel");
+    var head = el("div", "cm-wechat-copy-head");
+    head.innerHTML = '<strong>公众号复制区</strong><button type="button" class="cm-wechat-copy-close">×</button>';
+    var tip = el("p", "cm-wechat-copy-tip", "在下方正文区域内点击，使用 Cmd/Ctrl+A 再 Cmd/Ctrl+C，然后粘贴到公众号编辑器。");
+    var area = el("div", "cm-wechat-copy-area");
+    area.contentEditable = "true";
+    area.innerHTML = html;
+    panel.appendChild(head);
+    panel.appendChild(tip);
+    panel.appendChild(area);
+    mask.appendChild(panel);
+    document.body.appendChild(mask);
+    function close() { mask.remove(); }
+    head.querySelector("button").onclick = close;
+    mask.addEventListener("click", function (e) { if (e.target === mask) close(); });
+    setTimeout(function () {
+      area.focus();
+      selectNodeContents(area);
+    }, 0);
+  }
+
+  function selectNodeContents(node) {
+    var sel = window.getSelection && window.getSelection();
+    if (!sel) return;
+    var range = document.createRange();
+    range.selectNodeContents(node);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function htmlToPlainText(html) {
+    var tmp = document.createElement("div");
+    tmp.innerHTML = html;
+    return tmp.textContent || "";
   }
 
   function cssName(prop) {

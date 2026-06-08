@@ -893,6 +893,65 @@
 .cm-confirm p { margin: 0 0 22px; font-size: 15px; line-height: 1.6; }
 .cm-confirm-btns { display: flex; gap: 10px; justify-content: flex-end; }
 
+/* ---------- 11. 微信公众号可见复制区 ---------- */
+.cm-wechat-copy-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 320;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+.cm-wechat-copy-panel {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  background: #f7f7f7;
+  border-radius: 12px;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.cm-wechat-copy-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  color: #111827;
+  background: #fff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  font-family: var(--cm-font-sans);
+}
+.cm-wechat-copy-close {
+  border: 0;
+  background: transparent;
+  color: #4b5563;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+.cm-wechat-copy-tip {
+  flex: none;
+  margin: 0;
+  padding: 10px 14px;
+  color: #4b5563;
+  font: 13px/1.5 var(--cm-font-sans);
+  background: #f3f4f6;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.cm-wechat-copy-area {
+  flex: 1 1 auto;
+  min-height: 360px;
+  overflow: auto;
+  padding: 18px;
+  background: #fff;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* ---------- 11. 提示 toast ---------- */
 .cm-toast {
   position: fixed;
