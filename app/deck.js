@@ -553,7 +553,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
 
   function cloneWechatNode(node) {
     if (!node) return null;
-    if (node.nodeType === 3) return document.createTextNode(node.textContent || "");
+    if (node.nodeType === 3) return cloneWechatTextNode(node.textContent || "");
     if (node.nodeType !== 1 || isRuntimeChrome(node)) return null;
     var tag = wechatTag(node);
     var out = document.createElement(tag);
@@ -566,6 +566,18 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       if (cloned) out.appendChild(cloned);
     });
     return out;
+  }
+
+  function cloneWechatTextNode(text) {
+    if (!text) return null;
+    if (!text.trim()) return null;
+    var frag = document.createDocumentFragment();
+    var lines = text.replace(/\r\n?/g, "\n").split("\n");
+    lines.forEach(function (line, i) {
+      if (i) frag.appendChild(document.createElement("br"));
+      if (line) frag.appendChild(document.createTextNode(line));
+    });
+    return frag;
   }
 
   function wechatTag(node) {
