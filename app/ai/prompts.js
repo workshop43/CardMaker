@@ -11,7 +11,6 @@
    ④ 普通卡片用常规流（.cm-header / .cm-main / .cm-footer），公众号长文只用正文流。
    ============================================================= */
 
-const THEMES = "light dark warm ink mint gradient ocean sky sunset forest paper bold pastel tech cream night";
 const FONTS = "hei(现代黑) song(编辑宋) kai(文学楷) smiley(潮流标题) xiaowei(文艺宋) kuaile(活泼) mao(毛笔书法)";
 
 // 任务规格：这是一张要导出成图片的固定尺寸版面（不是网页）。只说「是什么」，不指导「怎么设计」。
@@ -40,8 +39,8 @@ function canvasBlock(preset, P) {
       "- 一个 <section class=\"card\"> 承载整篇微信公众号长文，基准宽度 " + P.w + "px，最小预览高度 " + P.h + "px；页面不分页，允许纵向变长滚动。",
       "- 公众号排版没有页眉、页脚、页码；不要输出 .cm-header、.cm-footer、.cm-page。",
       "- 主体内容放进 .cm-main；不要在 .cm-main 里输出文章主标题，直接从正文导语/段落/小标题开始。",
-      "- 预览可以用 data-theme=\"light\" / \"dark\" 模拟公众号亮色/暗色阅读颜色；复制出的公众号 HTML 不依赖背景色。",
-      "- 自定义背景务必同时设文字色（深底配浅字、浅底配深字），别只改背景不改 --cm-fg。",
+      "- 预览可以用 data-theme=\"light\" / \"dark\" 模拟公众号亮色/暗色阅读颜色；整篇文章外层和 .cm-main 不要加背景色。",
+      "- 正文组件可以使用背景、渐变和阴影，但必须兼容 light/dark：文字、次要文字、强调色、边框、组件底色、阴影使用 --cm-fg / --cm-muted / --cm-accent / --cm-line / --cm-surface / --cm-surface-strong / --cm-shadow 等变量，不要写死只适合单一底色的颜色。",
       "- 禁止 <html>/<head>/<body>、``` 围栏、解释文字、<script>、外链图片/字体/CSS。换字体用 data-font（" + FONTS + "）。",
       TOKENS,
     ].join("\n");
@@ -109,8 +108,9 @@ function componentPolicy(preset) {
   if (preset === "story") {
     return [
       "【组件规范】",
-      "- 公众号模式的共享组件只包含文章标题、导语、正文段落、小标题、引用、重点块、分隔、列表、图片占位等正文组件。",
+      "- 公众号模式的共享组件只包含导语、正文段落、小标题、引用、重点块、分隔、列表、图片占位等正文组件。",
       "- 不要定义或使用 header/footer/page number 这类卡片 chrome。",
+      "- 整篇文章外层和 .cm-main 不使用背景色；重点块、引用、卡片等局部组件可以有背景、渐变、阴影，但要用 light/dark 兼容变量。",
       "- 视觉系统集中在 deck 级 <style>，正文组件可通过语义 class 复用。",
       "- 可以自行设计 DOM 结构和正文组件组合；最终要像一篇可复制到公众号编辑器的长文。",
     ].join("\n");
@@ -184,12 +184,11 @@ export function planPrompt(preset, pages, topic, context) {
     storyLine,
     "",
     "【只输出一个 JSON，禁止任何解释文字、禁止 ``` 围栏】，结构：",
-    '{"title":"整套标题","scene":"用途/受众/调性，一两句","theme":"从配色盘选一个","font":"从字体选一个 key","pages":[' +
+    '{"title":"整套标题","scene":"用途/受众/调性，一两句","theme":"自由风格描述，可空","font":"从字体选一个 key","pages":[' +
       '{"role":"cover|content|data|quote|ending","title":"本页标题(完整)","subtitle":"副标题(完整，可空)","content":[{"heading":"小标题(可空)","text":"完整说明句"}]}]}',
     contentLine,
-    "配色盘：" + THEMES,
     "字体：" + FONTS,
-    "整套用同一 theme/font。role 用上面给定的值。",
+    "theme 是自由风格描述，不是固定配色 key；配色组合由后续 design 阶段自行设计。整套用同一 font。role 用上面给定的值。",
     "",
     contextBlock(context),
   ].join("\n");
@@ -235,7 +234,7 @@ export function designPrompt(preset, P, plan, samplePage, samplePageNum, total, 
     "",
     mediumBlock(preset, P),
     sceneLine(plan),
-    "建议 data-theme=" + (plan.theme || "") + "、data-font=" + (plan.font || "") + "（可进一步定制）。配色、字号字阶、版式、间距、装饰——设计判断由你做主。",
+    "风格方向：" + (plan.theme || "由你根据场景自行决定") + "。建议 data-font=" + (plan.font || "") + "（可进一步定制）。配色组合、字号字阶、版式、间距、装饰——设计判断由你做主，不受内置主题限制。",
     "你必须在 <style> 中定义足够复用的页面组件和 role 变体，让 cover/content/data/quote/ending 都能用同一套视觉语言排版；不要把关键视觉写进样板页的 style 属性。",
     "",
     layoutBlock(preset),
@@ -372,7 +371,7 @@ export function structurePrompt(plan, feedback, currentPageNum, context) {
     "涉及当前页的相对操作时，当前页序号按下面给出的 currentPageNum 理解。",
     "",
     "【只输出一个 JSON，禁止解释文字、禁止 ``` 围栏】，结构：",
-    '{"title":"整套标题","scene":"用途/受众/调性","theme":"主题 key","font":"字体 key","pages":[{"id":"p1 或 new","role":"cover|content|data|quote|ending","title":"完整标题","subtitle":"完整副标题，可空","content":[{"heading":"小标题，可空","text":"完整说明句"}]}]}',
+    '{"title":"整套标题","scene":"用途/受众/调性","theme":"自由风格描述，可空","font":"字体 key","pages":[{"id":"p1 或 new","role":"cover|content|data|quote|ending","title":"完整标题","subtitle":"完整副标题，可空","content":[{"heading":"小标题，可空","text":"完整说明句"}]}]}',
     "",
     contextBlock(context),
   ].join("\n");
@@ -397,14 +396,13 @@ export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML
     "可按用户意见精确修改已有 selector/class 规则，也可补充新的 class 规则；保留不相关规则和当前视觉系统。",
     "可调整配色 / 强调色、字体、组件外观、整体风格、跨页组件规范——设计判断由你做主。",
     preset === "story"
-      ? "可调整文章标题、导语、段落、小标题、引用、重点块、分隔等正文组件的样式、间距、层级和密度一致性；不要引入 header/footer/page number。"
+      ? "可调整导语、段落、小标题、引用、重点块、分隔等正文组件的样式、间距、层级和密度一致性；不要引入 header/footer/page number；不要给整篇文章外层或 .cm-main 添加背景色；局部组件的背景、渐变、阴影必须兼容 light/dark。"
       : "可调整 header/footer/title/subtitle/page number/内容块/section label 等跨页组件的样式、间距、层级和密度一致性。",
     preset === "story"
       ? "【保留 .cm-main 正文流结构】——只改视觉（配色/字体/线条/质感）和正文组件，不要新增 .cm-header / .cm-footer。"
       : "【保留 .cm-header / .cm-main / .cm-footer 的常规流结构，别给它们加 position:absolute】——只改视觉（配色/字体/线条/质感），别动版面结构，否则各页会对不齐。",
     "不要输出 <section>，不要把 class 级样式分散写进每页 section 的 style 属性。",
     "若换中文字体：在 <style> 之前单独输出一行 <!--FONT key-->（key 从 " + FONTS + " 里选）。",
-    "若整套需要切换内置主题 key：在 <style> 之前单独输出一行 <!--THEME key-->（key 从 " + THEMES + " 里选）。这会由执行层统一写到所有页面的 data-theme。",
     "",
     mediumBlock(preset, P),
     canvasBlock(preset, P),
@@ -414,7 +412,7 @@ export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML
     TOKENS,
     contextBlock(context),
     "",
-    "【只输出修改后的完整 <style>…</style>（若换字体/主题则其前面加 <!--FONT key--> / <!--THEME key-->），不要 <section>、不要解释文字、不要 ``` 围栏。】",
+    "【只输出修改后的完整 <style>…</style>（若换字体则其前面加 <!--FONT key-->），不要 <section>、不要解释文字、不要 ``` 围栏。】",
   ].join("\n");
   const user = [
     "当前全局 <style>：\n" + currentStyle,

@@ -591,6 +591,10 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     }
     var radius = px(cs.borderRadius);
     if (radius) styles.push("border-radius:" + roundPx(radius) + "px");
+    var bg = safeColor(cs.backgroundColor, "");
+    if (bg) styles.push("background-color:" + bg);
+    if (cs.backgroundImage && cs.backgroundImage !== "none") styles.push("background-image:" + cs.backgroundImage);
+    if (cs.boxShadow && cs.boxShadow !== "none") styles.push("box-shadow:" + cs.boxShadow);
     if (tag === "img") styles.push("display:block;width:100%;height:auto");
     return styles.join(";") + ";";
   }

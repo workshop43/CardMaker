@@ -82,6 +82,9 @@
   --cm-muted: #57606a;
   --cm-line: rgba(0, 0, 0, 0.08);
   --cm-accent: #576b95;
+  --cm-surface: #f7f8fa;
+  --cm-surface-strong: #eef2f8;
+  --cm-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 .cm-app[data-preset="story"] .card[data-theme="dark"],
 .cm-app[data-preset="story"] .card[data-theme="night"] {
@@ -91,6 +94,9 @@
   --cm-muted: rgba(255, 255, 255, 0.62);
   --cm-line: rgba(255, 255, 255, 0.12);
   --cm-accent: #8aa4d6;
+  --cm-surface: rgba(255, 255, 255, 0.06);
+  --cm-surface-strong: rgba(255, 255, 255, 0.1);
+  --cm-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
 }
 
 /* ---------- 2. 应用界面骨架 ---------- */
