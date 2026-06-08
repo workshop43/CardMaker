@@ -43,7 +43,7 @@ function canvasBlock(preset, P) {
       "- 公众号排版没有页眉、页脚、页码；不要输出 .cm-header、.cm-footer、.cm-page。",
       "- 主体内容放进 .cm-main；不要在 .cm-main 里输出文章主标题，直接从正文导语/段落/小标题开始。",
       "- 预览可以用 data-theme=\"light\" / \"dark\" 模拟公众号亮色/暗色阅读颜色；整篇文章外层和 .cm-main 不要加背景色。",
-      "- 正文组件可以使用背景、渐变和阴影，但必须兼容 light/dark：文字、次要文字、强调色、边框、组件底色、阴影使用 --cm-fg / --cm-muted / --cm-accent / --cm-line / --cm-surface / --cm-surface-strong / --cm-shadow 等变量，不要写死只适合单一底色的颜色。",
+      "- 正文组件可以使用背景、渐变和阴影，但必须兼容 light/dark：默认正文、次要文字、边框、普通组件底色、阴影可使用 --cm-fg / --cm-muted / --cm-line / --cm-surface / --cm-surface-strong / --cm-shadow 等变量自适应；具有明确设计含义的强调字色/装饰色可以使用具体色值，但要在亮色和暗色阅读背景上都清晰可读。",
       "- 禁止 <html>/<head>/<body>、``` 围栏、解释文字、<script>、外链图片/字体/CSS。换字体用 data-font（" + FONTS + "）。",
       TOKENS,
     ].join("\n");
@@ -113,7 +113,7 @@ function componentPolicy(preset) {
       "【组件规范】",
       "- 公众号模式的共享组件只包含导语、正文段落、小标题、引用、重点块、分隔、列表、图片占位等正文组件。",
       "- 不要定义或使用 header/footer/page number 这类卡片 chrome。",
-      "- 整篇文章外层和 .cm-main 不使用背景色；重点块、引用、卡片等局部组件可以有背景、渐变、阴影，但要用 light/dark 兼容变量。",
+      "- 整篇文章外层和 .cm-main 不使用背景色；重点块、引用、卡片等局部组件可以有背景、渐变、阴影。默认中性色可用 light/dark 兼容变量自适应；有明确设计意图的强调色可以写成具体色值，但必须在 light/dark 预览下都可读。",
       "- 视觉系统集中在 deck 级 <style>，正文组件可通过语义 class 复用。",
       "- 可以自行设计 DOM 结构和正文组件组合；最终要像一篇可复制到公众号编辑器的长文。",
     ].join("\n");

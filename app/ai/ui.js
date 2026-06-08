@@ -727,28 +727,31 @@ async function runDesign(app) {
   S.cfg = cfgWithSignal(S.cfg, job);
   S.aborted = false;
   const m = streamMsg();
-  m.setText((S.uploadedStyle ? "正在套用上传样式" : "正在设计风格") + " + 排封面和第一个内容页，请稍候…");
+  const isStory = S.preset === "story";
+  m.setText(isStory
+    ? (S.uploadedStyle ? "正在套用上传样式" : "正在设计公众号正文样式") + " + 排公众号长文，请稍候…"
+    : (S.uploadedStyle ? "正在套用上传样式" : "正在设计风格") + " + 排封面和第一个内容页，请稍候…");
   try {
     S.sampleIdx = pickSampleIdx(S.plan);
     if (S.uploadedStyle && S.uploadedStyle.style) {
       S.designStyle = S.uploadedStyle.style;
-      m.setText("正在使用上传样式生成第一个内容页…");
+      m.setText(isStory ? "正在使用上传样式生成公众号长文…" : "正在使用上传样式生成第一个内容页…");
     } else {
       const r = await makeDesignSample(S.cfg, S.preset, S.PSet, S.plan, S.plan.pages[S.sampleIdx],
         S.sampleIdx + 1, S.plan.pages.length, fullDeckContext(app, { purpose: "design" }),
-        (txt, thinking) => { if (!thinking) m.setText("正在设计风格…"); });
+        (txt, thinking) => { if (!thinking) m.setText(isStory ? "正在设计公众号正文样式…" : "正在设计风格…"); });
       S.designStyle = r.style;
       S.sampleSection = r.section;
       if (S.sampleSection) S.sections[S.sampleIdx] = S.sampleSection;
     }
     if (!S.sections[S.sampleIdx]) {
-      m.setText("正在生成第一个内容页…");
+      m.setText(isStory ? "正在生成公众号长文…" : "正在生成第一个内容页…");
       S.sections[S.sampleIdx] = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle,
         S.plan.pages[S.sampleIdx], "", S.sampleIdx + 1, S.plan.pages.length, "", fullDeckContext(app, { purpose: "render", styleText: S.designStyle }));
     }
 
     const coverIdx = pickCoverIdx(S.plan);
-    if (coverIdx !== S.sampleIdx && !S.sections[coverIdx]) {
+    if (!isStory && coverIdx !== S.sampleIdx && !S.sections[coverIdx]) {
       m.setText("正在生成封面…");
       S.sections[coverIdx] = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle,
         S.plan.pages[coverIdx], "", coverIdx + 1, S.plan.pages.length, confirmedLayoutReference(coverIdx), fullDeckContext(app, { purpose: "render", styleText: S.designStyle }));
@@ -785,7 +788,7 @@ function resetInitialPagesAndDesign(app) {
   S.sections = [];
   S.nextIdx = 0;
   S.sampleSection = "";
-  addUserMsg("（重做封面和第一个内容页）");
+  addUserMsg(S.preset === "story" ? "（重新生成公众号长文）" : "（重做封面和第一个内容页）");
   runDesign(app);
 }
 

@@ -555,10 +555,12 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     if (style) out.setAttribute("style", style);
     if (node.tagName === "A" && node.getAttribute("href")) out.setAttribute("href", node.getAttribute("href"));
     if (node.tagName === "IMG" && node.getAttribute("src")) out.setAttribute("src", node.getAttribute("src"));
+    appendWechatPseudo(out, node, "::before");
     Array.prototype.forEach.call(node.childNodes, function (child) {
       var cloned = cloneWechatNode(child);
       if (cloned) out.appendChild(cloned);
     });
+    appendWechatPseudo(out, node, "::after");
     return out;
   }
 
@@ -579,24 +581,125 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       "font-weight:" + cs.fontWeight,
       "text-align:" + cs.textAlign,
     ];
+    pushTextStyles(styles, cs);
+    pushLayoutStyles(styles, cs, tag);
     ["marginTop", "marginRight", "marginBottom", "marginLeft", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"].forEach(function (prop) {
       var value = px(cs[prop]);
       if (value) styles.push(cssName(prop) + ":" + roundPx(value) + "px");
     });
-    if (cs.borderStyle !== "none" && px(cs.borderWidth)) {
-      styles.push("border:" + roundPx(px(cs.borderWidth)) + "px " + cs.borderStyle + " " + safeColor(cs.borderColor, "#e5e7eb"));
-    }
-    if (px(cs.borderLeftWidth) >= 3 && cs.borderLeftStyle !== "none") {
-      styles.push("border-left:" + roundPx(px(cs.borderLeftWidth)) + "px " + cs.borderLeftStyle + " " + safeColor(cs.borderLeftColor, "#4f46e5"));
-    }
+    pushBorderStyles(styles, cs);
     var radius = px(cs.borderRadius);
     if (radius) styles.push("border-radius:" + roundPx(radius) + "px");
+    pushPaintStyles(styles, cs);
+    if (tag === "img") styles.push("display:block;width:100%;height:auto");
+    return styles.join(";") + ";";
+  }
+
+  // 微信公众号粘贴通常不会保留外部 CSS。这里把影响排版和装饰的计算样式尽量写入节点。
+  function pushLayoutStyles(styles, cs, tag) {
+    var display = cs.display;
+    if (display && display !== "inline" && display !== "contents") styles.push("display:" + display);
+    if (/^(flex|inline-flex)$/i.test(display)) {
+      ["flexDirection", "flexWrap", "alignItems", "justifyContent"].forEach(function (prop) {
+        if (cs[prop]) styles.push(cssName(prop) + ":" + cs[prop]);
+      });
+      pushGap(styles, cs);
+    }
+    if (/^(grid|inline-grid)$/i.test(display)) {
+      ["gridTemplateColumns", "gridTemplateRows", "alignItems", "justifyContent"].forEach(function (prop) {
+        if (cs[prop] && cs[prop] !== "none") styles.push(cssName(prop) + ":" + cs[prop]);
+      });
+      pushGap(styles, cs);
+    }
+    if (!/^(span|strong|em|b|i|u|a)$/i.test(tag)) {
+      pushSize(styles, cs, "width");
+      pushSize(styles, cs, "minHeight");
+    }
+  }
+
+  function pushGap(styles, cs) {
+    var row = px(cs.rowGap);
+    var col = px(cs.columnGap);
+    if (row) styles.push("row-gap:" + roundPx(row) + "px");
+    if (col) styles.push("column-gap:" + roundPx(col) + "px");
+  }
+
+  function pushSize(styles, cs, prop) {
+    var value = px(cs[prop]);
+    if (value && isFinite(value)) styles.push(cssName(prop) + ":" + roundPx(value) + "px");
+  }
+
+  function pushTextStyles(styles, cs) {
+    if (cs.fontStyle && cs.fontStyle !== "normal") styles.push("font-style:" + cs.fontStyle);
+    if (cs.letterSpacing && cs.letterSpacing !== "normal") styles.push("letter-spacing:" + cs.letterSpacing);
+    if (cs.textDecorationLine && cs.textDecorationLine !== "none") styles.push("text-decoration:" + cs.textDecorationLine);
+    if (cs.whiteSpace && cs.whiteSpace !== "normal") styles.push("white-space:" + cs.whiteSpace);
+  }
+
+  function pushBorderStyles(styles, cs) {
+    var sides = ["Top", "Right", "Bottom", "Left"];
+    sides.forEach(function (side) {
+      var width = px(cs["border" + side + "Width"]);
+      var style = cs["border" + side + "Style"];
+      if (width && style !== "none") {
+        styles.push("border-" + side.toLowerCase() + ":" + roundPx(width) + "px " + style + " " + safeColor(cs["border" + side + "Color"], "#e5e7eb"));
+      }
+    });
+  }
+
+  function pushPaintStyles(styles, cs) {
     var bg = safeColor(cs.backgroundColor, "");
     if (bg) styles.push("background-color:" + bg);
     if (cs.backgroundImage && cs.backgroundImage !== "none") styles.push("background-image:" + cs.backgroundImage);
+    if (cs.backgroundSize && cs.backgroundSize !== "auto") styles.push("background-size:" + cs.backgroundSize);
+    if (cs.backgroundPosition && cs.backgroundPosition !== "0% 0%") styles.push("background-position:" + cs.backgroundPosition);
+    if (cs.backgroundRepeat && cs.backgroundRepeat !== "repeat") styles.push("background-repeat:" + cs.backgroundRepeat);
     if (cs.boxShadow && cs.boxShadow !== "none") styles.push("box-shadow:" + cs.boxShadow);
-    if (tag === "img") styles.push("display:block;width:100%;height:auto");
-    return styles.join(";") + ";";
+    var opacity = parseFloat(cs.opacity);
+    if (isFinite(opacity) && opacity < 1) styles.push("opacity:" + opacity);
+  }
+
+  // 把 ::before / ::after 里的分割线、圆点、序号等装饰降级成真实 span，避免粘贴后丢失。
+  function appendWechatPseudo(parent, node, pseudo) {
+    var cs;
+    try { cs = getComputedStyle(node, pseudo); } catch (e) { return; }
+    if (!cs) return;
+    var content = pseudoContent(cs.content);
+    var hasBox = px(cs.width) || px(cs.height) || safeColor(cs.backgroundColor, "") || (cs.backgroundImage && cs.backgroundImage !== "none") || (cs.borderTopStyle && cs.borderTopStyle !== "none" && px(cs.borderTopWidth));
+    if (!content && !hasBox) return;
+    var span = document.createElement("span");
+    if (content) span.textContent = content;
+    else span.innerHTML = "&nbsp;";
+    var styles = [
+      "box-sizing:border-box",
+      "display:" + (cs.display && cs.display !== "inline" ? cs.display : "inline-block"),
+      "max-width:100%",
+      "color:" + safeColor(cs.color, "inherit"),
+      "font-size:" + roundPx(px(cs.fontSize) || 16) + "px",
+      "line-height:" + lineHeightValue(cs),
+      "font-weight:" + cs.fontWeight,
+    ];
+    pushSize(styles, cs, "width");
+    pushSize(styles, cs, "height");
+    ["marginTop", "marginRight", "marginBottom", "marginLeft", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"].forEach(function (prop) {
+      var value = px(cs[prop]);
+      if (value) styles.push(cssName(prop) + ":" + roundPx(value) + "px");
+    });
+    pushBorderStyles(styles, cs);
+    var radius = px(cs.borderRadius);
+    if (radius) styles.push("border-radius:" + roundPx(radius) + "px");
+    pushPaintStyles(styles, cs);
+    span.setAttribute("style", styles.join(";") + ";");
+    parent.appendChild(span);
+  }
+
+  function pseudoContent(value) {
+    if (!value || value === "none" || value === "normal") return "";
+    var text = String(value);
+    if ((text[0] === '"' && text[text.length - 1] === '"') || (text[0] === "'" && text[text.length - 1] === "'")) {
+      text = text.slice(1, -1);
+    }
+    return text.replace(/\\A/g, "\n").replace(/\\00a0/gi, " ");
   }
 
   function copyPlainText(text) {
