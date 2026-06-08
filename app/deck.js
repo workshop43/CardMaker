@@ -794,8 +794,8 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var mask = el("div", "cm-wechat-copy-mask");
     var panel = el("div", "cm-wechat-copy-panel");
     var head = el("div", "cm-wechat-copy-head");
-    head.innerHTML = '<strong>公众号复制区</strong><button type="button" class="cm-wechat-copy-close">×</button>';
-    var tip = el("p", "cm-wechat-copy-tip", "在下方正文区域内点击，使用 Cmd/Ctrl+A 再 Cmd/Ctrl+C，然后粘贴到公众号编辑器。");
+    head.innerHTML = '<strong>公众号复制区</strong><div class="cm-wechat-copy-actions"><button type="button" class="cm-wechat-copy-copy">复制此内容</button><button type="button" class="cm-wechat-copy-close">×</button></div>';
+    var tip = el("p", "cm-wechat-copy-tip", "优先点击「复制此内容」后粘贴到公众号编辑器；也可以在下方正文区域内手动 Cmd/Ctrl+A、Cmd/Ctrl+C。");
     var area = el("div", "cm-wechat-copy-area");
     area.contentEditable = "true";
     area.innerHTML = html;
@@ -805,12 +805,26 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     mask.appendChild(panel);
     document.body.appendChild(mask);
     function close() { mask.remove(); }
-    head.querySelector("button").onclick = close;
+    head.querySelector(".cm-wechat-copy-close").onclick = close;
+    head.querySelector(".cm-wechat-copy-copy").onclick = function () {
+      var current = area.innerHTML;
+      if (copyHTMLWithCopyEvent(current) || copyRichHTMLFromDOM(current)) {
+        showInlineCopyTip(tip, "已复制。现在粘贴到公众号编辑器。");
+        return;
+      }
+      copyClipboardHTML(current).then(function (ok) {
+        showInlineCopyTip(tip, ok ? "已复制。现在粘贴到公众号编辑器。" : "复制失败，请手动选择下方正文复制。");
+      });
+    };
     mask.addEventListener("click", function (e) { if (e.target === mask) close(); });
     setTimeout(function () {
       area.focus();
       selectNodeContents(area);
     }, 0);
+  }
+
+  function showInlineCopyTip(node, text) {
+    node.textContent = text;
   }
 
   function selectNodeContents(node) {

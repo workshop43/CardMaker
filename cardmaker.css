@@ -924,6 +924,20 @@
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   font-family: var(--cm-font-sans);
 }
+.cm-wechat-copy-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.cm-wechat-copy-copy {
+  border: 0;
+  border-radius: 7px;
+  background: #111827;
+  color: #fff;
+  cursor: pointer;
+  font: 13px/1 var(--cm-font-sans);
+  padding: 8px 10px;
+}
 .cm-wechat-copy-close {
   border: 0;
   background: transparent;
