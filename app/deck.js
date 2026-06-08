@@ -270,7 +270,13 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     stage.appendChild(this.scaler);
     if (!this.view) {
       this.storyTools = el("div", "cm-story-tools");
+      this.storyThemeToggle = el("div", "cm-story-theme-toggle");
+      this.btnStoryLight = el("button", "cm-story-theme-btn", "Light");
+      this.btnStoryDark = el("button", "cm-story-theme-btn", "Dark");
+      this.storyThemeToggle.appendChild(this.btnStoryLight);
+      this.storyThemeToggle.appendChild(this.btnStoryDark);
       this.btnWechat = el("button", "cm-btn cm-primary", "复制公众号 HTML");
+      this.storyTools.appendChild(this.storyThemeToggle);
       this.storyTools.appendChild(this.btnWechat);
       stage.appendChild(this.storyTools);
     }
@@ -316,6 +322,8 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.fileImport.onchange = function () { self._handleImportFile(self.fileImport.files && self.fileImport.files[0]); };
     this.btnSave.onclick = function () { self.downloadHTML(); };
     if (this.btnWechat) this.btnWechat.onclick = function () { self.copyWeChatHTML(); };
+    if (this.btnStoryLight) this.btnStoryLight.onclick = function () { self.setStoryTheme("light"); };
+    if (this.btnStoryDark) this.btnStoryDark.onclick = function () { self.setStoryTheme("dark"); };
     this.textarea.addEventListener("input", function () { self._applyEditor(); });
     this._updatePresetTools();
   };
@@ -741,6 +749,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.counter.textContent = this.cards.length ? this.index + 1 + " / " + this.cards.length : "0";
     this.btnPrev.disabled = this.index <= 0;
     this.btnNext.disabled = this.index >= this.cards.length - 1;
+    this._syncStoryThemeTools();
   };
 
   // 等比缩放，让当前卡片铺满舞台
@@ -1136,6 +1145,22 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   CardMaker.prototype._updatePresetTools = function () {
     if (this.btnWechat) this.btnWechat.hidden = this.preset !== "story";
     if (this.storyTools) this.storyTools.hidden = this.preset !== "story";
+    this._syncStoryThemeTools();
+  };
+
+  CardMaker.prototype.setStoryTheme = function (theme) {
+    theme = theme === "dark" ? "dark" : "light";
+    var cards = this.cards && this.cards.length ? this.cards : Array.prototype.slice.call(this.cardsWrap.querySelectorAll(".card"));
+    cards.forEach(function (card) { card.setAttribute("data-theme", theme); });
+    this._syncStoryThemeTools();
+  };
+
+  CardMaker.prototype._syncStoryThemeTools = function () {
+    if (!this.btnStoryLight || !this.btnStoryDark) return;
+    var card = this.cards && this.cards[this.index] ? this.cards[this.index] : null;
+    var theme = card && card.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    this.btnStoryLight.classList.toggle("is-active", theme === "light");
+    this.btnStoryDark.classList.toggle("is-active", theme === "dark");
   };
 
   // 切到某比例并载入其示例（示例独立存放在 examples/<preset>.html，按需 fetch 注入）
