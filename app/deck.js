@@ -577,7 +577,12 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     if (!text) return null;
     if (!text.trim()) return null;
     var frag = document.createDocumentFragment();
-    var lines = text.replace(/\r\n?/g, "\n").replace(/\n{2,}/g, "\n").split("\n");
+    var lines = text
+      .replace(/\r\n?/g, "\n")
+      .replace(/^\s*\n+/, "")
+      .replace(/\n+\s*$/, "")
+      .replace(/\n{2,}/g, "\n")
+      .split("\n");
     lines.forEach(function (line, i) {
       if (i) frag.appendChild(document.createElement("br"));
       var cleaned = line.replace(/\s+/g, " ").trim();
