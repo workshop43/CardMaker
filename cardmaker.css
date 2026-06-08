@@ -243,36 +243,65 @@
 .cm-app[data-preset="story"] .cm-story-tools { display: flex; }
 .cm-story-tools[hidden] { display: none !important; }
 .cm-story-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 360px;
-  padding: 6px 8px 6px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: none;
+  position: relative;
+  width: 430px;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border: 1px solid var(--cm-story-title-line, rgba(0, 0, 0, 0.08));
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(8px);
-  color: #eef2ff;
+  background: var(--cm-story-title-bg, #fff);
+  color: var(--cm-story-title-fg, #1d1d1f);
   font-family: var(--cm-font-sans);
+  box-shadow: var(--cm-story-title-shadow, 0 10px 28px rgba(0, 0, 0, 0.08));
+}
+.cm-app[data-preset="story"] .cm-story-title {
+  display: flex;
+  margin-bottom: 12px;
+}
+.cm-story-title[data-theme="dark"] {
+  --cm-story-title-bg: #191919;
+  --cm-story-title-fg: rgba(255, 255, 255, 0.9);
+  --cm-story-title-line: rgba(255, 255, 255, 0.12);
+  --cm-story-title-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  --cm-story-title-copy-bg: rgba(255, 255, 255, 0.08);
+  --cm-story-title-copy-bg-hover: rgba(255, 255, 255, 0.13);
+  --cm-story-title-copy-fg: rgba(255, 255, 255, 0.9);
+  --cm-story-title-copy-line: rgba(255, 255, 255, 0.12);
+}
+.cm-story-title[hidden] {
+  display: none !important;
 }
 .cm-story-title-text {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  line-height: 1.2;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 .cm-story-title-copy {
-  flex: none;
-  border: 0;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: 1px solid var(--cm-story-title-copy-line, rgba(0, 0, 0, 0.08));
+  border-radius: 8px;
+  background: var(--cm-story-title-copy-bg, #f6f7f9);
+  color: var(--cm-story-title-copy-fg, #1d1d1f);
   cursor: pointer;
   font: 12px/1 var(--cm-font-sans);
-  padding: 6px 8px;
+  padding: 8px 10px;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 0.16s ease, transform 0.16s ease, background 0.16s ease;
 }
+.cm-story-title:hover .cm-story-title-copy,
+.cm-story-title-copy:focus {
+  opacity: 1;
+  transform: translateY(0);
+}
+.cm-story-title-copy:hover { background: var(--cm-story-title-copy-bg-hover, #eceff3); }
 .cm-story-theme-toggle {
   display: inline-flex;
   align-items: center;
@@ -334,17 +363,40 @@
 .cm-app[data-preset="story"] .cm-cards,
 .cm-app[data-preset="story"] .card { width: 430px; min-height: 932px; height: auto; }
 .cm-app[data-preset="story"] .cm-stage { align-items: flex-start; overflow: auto; padding: 24px 0; }
-.cm-app[data-preset="story"] .cm-scaler { transform-origin: top center; }
+.cm-app[data-preset="story"] .cm-scaler {
+  transform-origin: top center;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
 .cm-app[data-preset="story"] .card { justify-content: flex-start; overflow: visible; }
 .cm-app[data-preset="story"] .cm-main {
   display: block;
   flex: none;
   min-height: 0;
+  max-width: 100%;
   gap: 0;
   background: transparent !important;
   background-image: none !important;
 }
-.cm-app[data-preset="story"] .cm-main > * { margin-top: 0; }
+.cm-app[data-preset="story"] .cm-main,
+.cm-app[data-preset="story"] .cm-main * {
+  box-sizing: border-box;
+}
+.cm-app[data-preset="story"] .cm-main > * {
+  margin-top: 0;
+  max-width: 100%;
+  min-width: 0;
+}
+.cm-app[data-preset="story"] .cm-main :where(section, article, div, aside, blockquote, figure, p, ul, ol, li) {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cm-app[data-preset="story"] .cm-main :where([style*="width"], [style*="min-width"]) {
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
 .cm-app[data-preset="story"] .cm-nav { display: none; }
 .cm-app[data-preset="story"] .cm-header,
 .cm-app[data-preset="story"] .cm-footer,

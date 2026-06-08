@@ -267,8 +267,6 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var stage = el("div", "cm-stage");
     this.scaler = el("div", "cm-scaler");
     this.cardsWrap = el("div", "cm-cards");
-    this.scaler.appendChild(this.cardsWrap);
-    stage.appendChild(this.scaler);
     if (!this.view) {
       this.storyTools = el("div", "cm-story-tools");
       this.storyThemeToggle = el("div", "cm-story-theme-toggle");
@@ -281,15 +279,17 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       this.btnStoryCopyTitle = el("button", "cm-story-title-copy", "复制标题");
       this.storyTitle.appendChild(this.storyTitleText);
       this.storyTitle.appendChild(this.btnStoryCopyTitle);
+      this.scaler.appendChild(this.storyTitle);
       this.btnWechat = el("button", "cm-btn cm-primary", "复制公众号 HTML");
       this.btnWechatBuffer = el("button", "cm-btn", "复制区");
       this.btnWechatBuffer.hidden = true;
-      this.storyTools.appendChild(this.storyTitle);
       this.storyTools.appendChild(this.storyThemeToggle);
       this.storyTools.appendChild(this.btnWechat);
       this.storyTools.appendChild(this.btnWechatBuffer);
       stage.appendChild(this.storyTools);
     }
+    this.scaler.appendChild(this.cardsWrap);
+    stage.appendChild(this.scaler);
 
     if (!this.view) body.appendChild(this.editor);
     body.appendChild(stage);
@@ -524,30 +524,44 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   // 输出适合粘贴到微信公众号编辑器的 HTML 片段。
   CardMaker.prototype.getWeChatHTML = function () {
     if (!this.cards || !this.cards.length) return "";
-    var parts = [];
-    this.cards.forEach(function (card, i) {
-      var main = card.querySelector(".cm-main") || card;
-      var wrap = document.createElement("section");
-      var cardCS = getComputedStyle(card);
-      wrap.setAttribute("style", [
-        "box-sizing:border-box",
-        "display:block",
-        "margin:" + (i ? "22px 0 0" : "0"),
-        "padding:0",
-        "color:" + safeColor(cardCS.color, "#1f2937"),
-        "font-size:" + scaledWechatFont(px(cardCS.fontSize) || 16) + "px",
-        "line-height:" + lineHeightValue(cardCS),
-        "font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',Arial,sans-serif",
-      ].join(";") + ";");
-      Array.prototype.forEach.call(main.childNodes, function (node) {
-        if (isRuntimeChrome(node)) return;
-        var cloned = cloneWechatNode(node);
-        if (cloned) wrap.appendChild(cloned);
+    var restoreThemes = [];
+    try {
+      // dark/light 只是公众号预览态；复制到公众号时按 light 正文环境计算样式，避免把 dark 白字暗底内联出去。
+      this.cards.forEach(function (card) {
+        restoreThemes.push({ card: card, theme: card.getAttribute("data-theme") });
+        card.setAttribute("data-theme", "light");
       });
-      parts.push(wrap.outerHTML);
-    });
-    return '<section style="box-sizing:border-box;display:block;max-width:430px;margin:0 auto;padding:0;color:#1f2937;font-size:16px;line-height:1.8;">' +
-      parts.join("\n") + "</section>";
+      var parts = [];
+      this.cards.forEach(function (card, i) {
+        var main = card.querySelector(".cm-main") || card;
+        var wrap = document.createElement("section");
+        var cardCS = getComputedStyle(card);
+        wrap.setAttribute("style", [
+          "box-sizing:border-box",
+          "display:block",
+          "margin:" + (i ? "22px 0 0" : "0"),
+          "padding:0",
+          "color:" + safeColor(cardCS.color, "#1f2937"),
+          "font-size:" + scaledWechatFont(px(cardCS.fontSize) || 16) + "px",
+          "line-height:" + lineHeightValue(cardCS),
+          "font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',Arial,sans-serif",
+        ].join(";") + ";");
+        Array.prototype.forEach.call(main.childNodes, function (node) {
+          if (isRuntimeChrome(node)) return;
+          var cloned = cloneWechatNode(node);
+          if (cloned) wrap.appendChild(cloned);
+        });
+        parts.push(wrap.outerHTML);
+      });
+      return '<section style="box-sizing:border-box;display:block;max-width:430px;margin:0 auto;padding:0;color:#1f2937;font-size:16px;line-height:1.8;">' +
+        parts.join("\n") + "</section>";
+    } finally {
+      restoreThemes.forEach(function (item) {
+        if (item.theme == null) item.card.removeAttribute("data-theme");
+        else item.card.setAttribute("data-theme", item.theme);
+      });
+      this._syncStoryThemeTools();
+    }
   };
 
   // 判断用户上传的是 Markdown 文件；MIME 在不同系统里不稳定，因此以扩展名为主。
@@ -974,16 +988,17 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
 
     this._toast("正在打包 HTML…");
     Promise.all([Promise.all(cssJobs), Promise.all(jsJobs)]).then(function (res) {
+      var exportTitle = exportContentTitle(self);
       var esc = function (s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); };
       var deck = '<div data-cardmaker data-mode="view" data-preset="' + self.preset + '"' +
         (self.font ? ' data-font="' + self.font + '"' : "") +
-        ' data-title="' + esc(self.title) + '">\n' + self.getHTML() + "\n</div>";
+        ' data-title="' + esc(exportTitle) + '">\n' + self.getHTML() + "\n</div>";
       var doc = '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n<meta charset="UTF-8">\n' +
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
-        "<title>" + esc(self.title) + "</title>\n" + res[0].join("\n") +
+        "<title>" + esc(exportTitle) + "</title>\n" + res[0].join("\n") +
         "\n</head>\n<body>\n" + deck + "\n" + res[1].join("\n") + "\n</body>\n</html>\n";
-      download(URL.createObjectURL(new Blob([doc], { type: "text/html" })), slug(self.title) + ".html");
-      self._toast("已保存为 " + slug(self.title) + ".html");
+      download(URL.createObjectURL(new Blob([doc], { type: "text/html" })), slug(exportTitle) + ".html");
+      self._toast("已保存为 " + slug(exportTitle) + ".html");
     }).catch(function (e) { self._toast("保存失败：" + (e && e.message || e)); });
   };
 
@@ -1357,6 +1372,21 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     return String(s).trim().replace(/\s+/g, "-").replace(/[^\w一-龥-]/g, "").slice(0, 40) || "deck";
   }
 
+  // 导出文件名使用当前内容标题，而不是浏览器 document.title 或旧的 deck 元信息。
+  function exportContentTitle(app) {
+    if (app && app.preset === "story" && app.title && String(app.title).trim()) return compactTitle(app.title);
+    var card = app && app.cards && app.cards.length ? app.cards[0] : null;
+    var titleEl = card && card.querySelector("h1,h2,.cm-display,.cm-title,.cm-titlebar");
+    var fromContent = titleEl ? compactTitle(titleEl.textContent) : "";
+    if (fromContent) return fromContent;
+    if (app && app.title && String(app.title).trim()) return compactTitle(app.title);
+    return "deck";
+  }
+
+  function compactTitle(text) {
+    return String(text || "").replace(/\s+/g, " ").trim();
+  }
+
   // ---------- 公开 API（供扩展模块如 cardmaker-ai.js 使用） ----------
 
   // 在工具栏动作区前插入一个按钮
@@ -1474,11 +1504,15 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var theme = card && card.getAttribute("data-theme") === "dark" ? "dark" : "light";
     this.btnStoryLight.classList.toggle("is-active", theme === "light");
     this.btnStoryDark.classList.toggle("is-active", theme === "dark");
+    if (this.storyTitle) this.storyTitle.setAttribute("data-theme", theme);
   };
 
   CardMaker.prototype._syncStoryTitle = function () {
-    if (!this.storyTitleText) return;
-    this.storyTitleText.textContent = this.title || "未命名公众号文章";
+    if (!this.storyTitleText || !this.storyTitle) return;
+    var hasTitle = !!String(this.title || "").trim();
+    var hasCards = !!(this.cards && this.cards.length);
+    this.storyTitle.hidden = this.preset !== "story" || !hasTitle || !hasCards;
+    this.storyTitleText.textContent = hasTitle ? this.title : "";
   };
 
   CardMaker.prototype.copyStoryTitle = function () {

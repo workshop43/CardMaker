@@ -119,6 +119,8 @@ function clearStageForNewDeck(app) {
   if (activeJob) stopActiveJob();
   S = null;
   app.setHTML("");
+  app.title = "";
+  if (typeof app._syncStoryTitle === "function") app._syncStoryTitle();
   addAIMsg("画布已清空。现在输入主题会生成新的 deck。");
 }
 
