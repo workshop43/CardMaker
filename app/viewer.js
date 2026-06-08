@@ -183,12 +183,13 @@
     this.btnNext.disabled = this.index >= this.cards.length - 1;
   };
 
-  // 等比缩放，让当前卡片铺满舞台
+  // 等比缩放：普通 deck 按画布完整适配；公众号长文只按宽度适配，允许纵向滚动阅读。
   Viewer.prototype._fit = function () {
     var p = PRESETS[this.preset];
     var aw = this.stage.clientWidth - 48, ah = this.stage.clientHeight - 48;
     if (aw <= 0 || ah <= 0) return;
-    this.scaler.style.transform = "scale(" + Math.min(aw / p.w, ah / p.h) + ")";
+    var scale = this.preset === "story" ? Math.min(1, aw / p.w) : Math.min(aw / p.w, ah / p.h);
+    this.scaler.style.transform = "scale(" + scale + ")";
   };
 
   Viewer.prototype.goTo = function (i) { if (i < 0 || i >= this.cards.length) return; this.index = i; this._render(); };

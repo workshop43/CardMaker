@@ -117,18 +117,27 @@ export function pageContentText(pg) {
 
 // ---------- 1) PLAN：内容定稿（每页完整文案 + 场景，输出 JSON） ----------
 export function planPrompt(preset, pages, topic, context) {
-  const pageLine = pages
+  const isStory = preset === "story";
+  const pageLine = isStory
+    ? "页数：恰好 1 页（微信公众号排版是单篇长文，不分页；pages 数组长度必须是 1）。"
+    : pages
     ? "页数：恰好 " + pages + " 页（pages 数组长度必须是 " + pages + "）。"
     : "页数：结合主题、受众、内容复杂度和输入约束自行决定。";
+  const storyLine = isStory
+    ? "微信公众号模式：pages[0] 承载整篇文章，把完整标题、导语、章节、小标题、段落、引用/重点块都放进这一页的 content；根据内容需要给 6~12 条 content，不要拆成多页。"
+    : "整套连续叙事：页与页有承接（总分/递进/起承转合）。每个内容页是能独立读懂的小章节。";
+  const contentLine = isStory
+    ? "公众号长文页的 content 要覆盖完整文章结构（每条 heading + 完整 text），文字写完整、能直接读，就是最终进入公众号的正文。"
+    : "封面/金句/结尾页 content 可留空或一两条；内容/数据页给 2~3 条 content（每条 heading + 完整 text）。所有文字写完整、能直接读，就是最终上卡的字。";
   const sys = [
     "把主题拆成一套卡片 deck，并写出每页的【完整文案】——是最终要印在卡片上的字，而不是粗略提纲。",
     "先定场景（scene）：这套是干什么用的、给谁看、什么调性，一两句话——后续设计据此定风格。",
-    "整套连续叙事：页与页有承接（总分/递进/起承转合）。每个内容页是能独立读懂的小章节。",
+    storyLine,
     "",
     "【只输出一个 JSON，禁止任何解释文字、禁止 ``` 围栏】，结构：",
     '{"title":"整套标题","scene":"用途/受众/调性，一两句","theme":"从配色盘选一个","font":"从字体选一个 key","pages":[' +
       '{"role":"cover|content|data|quote|ending","title":"本页标题(完整)","subtitle":"副标题(完整，可空)","content":[{"heading":"小标题(可空)","text":"完整说明句"}]}]}',
-    "封面/金句/结尾页 content 可留空或一两条；内容/数据页给 2~3 条 content（每条 heading + 完整 text）。所有文字写完整、能直接读，就是最终上卡的字。",
+    contentLine,
     "配色盘：" + THEMES,
     "字体：" + FONTS,
     "整套用同一 theme/font。role 用上面给定的值。",

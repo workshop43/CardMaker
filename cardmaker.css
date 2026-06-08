@@ -240,7 +240,11 @@
 .cm-app[data-preset="ppt"] .cm-cards,
 .cm-app[data-preset="ppt"] .card { width: 1280px; height: 720px; }
 .cm-app[data-preset="story"] .cm-cards,
-.cm-app[data-preset="story"] .card { width: 1080px; height: 1920px; }
+.cm-app[data-preset="story"] .card { width: 1080px; min-height: 1920px; height: auto; }
+.cm-app[data-preset="story"] .cm-stage { align-items: flex-start; overflow: auto; padding: 24px 0; }
+.cm-app[data-preset="story"] .cm-scaler { transform-origin: top center; }
+.cm-app[data-preset="story"] .card { justify-content: flex-start; overflow: visible; }
+.cm-app[data-preset="story"] .cm-nav { display: none; }
 
 /* ---------- 5. 卡片基础排版（让最简单的 HTML 也好看） ---------- */
 .card {

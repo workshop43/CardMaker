@@ -675,7 +675,9 @@ async function runGenerate(app, cfg, topic) {
   const m1 = streamMsg();
   m1.setText("正在构思内容大纲…");
   try {
-    S.plan = await makePlan(runCfg, preset, null, topic, fullDeckContext(app, { purpose: "plan" }));
+    // 微信公众号是单篇长文，不走 deck 分页规划；其他比例仍由模型按内容复杂度决定页数。
+    const requestedPages = preset === "story" ? 1 : null;
+    S.plan = await makePlan(runCfg, preset, requestedPages, topic, fullDeckContext(app, { purpose: "plan" }));
   } catch (e) {
     m1.done();
     m1.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
@@ -755,6 +757,14 @@ async function runDesign(app) {
     m.done();
     applySections(app);
     app.goTo(0);
+    if (S.preset === "story") {
+      m.setHtml("公众号长文已生成，请查看左侧画布。确认后可点击顶部「复制公众号 HTML」，粘贴到公众号编辑器。");
+      setMsgActions(m.el, [
+        { label: "重新生成长文", onClick: () => resetInitialPagesAndDesign(app) },
+      ]);
+      endJob(job);
+      return;
+    }
     m.setHtml("封面和第一个内容页已就绪，请查看左侧画布。确认通过后再继续生成后续页面。");
     m.addActions([
       { label: "重做前两页", onClick: () => resetInitialPagesAndDesign(app) },

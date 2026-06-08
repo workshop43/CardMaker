@@ -740,7 +740,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var availW = this.stage.clientWidth - 48;
     var availH = this.stage.clientHeight - 48;
     if (availW <= 0 || availH <= 0) return;
-    var scale = Math.min(availW / p.w, availH / p.h);
+    var scale = this.preset === "story" ? Math.min(1, availW / p.w) : Math.min(availW / p.w, availH / p.h);
     this.scaler.style.transform = "scale(" + scale + ")";
   };
 
