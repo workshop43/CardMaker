@@ -75,6 +75,23 @@
   --cm-text: 16px;  --cm-text-sm: 13px;  --cm-kicker: 12px;
   --cm-h3: 18px;    --cm-h2: 22px;       --cm-h1: 30px;       --cm-display: 36px;
 }
+.cm-app[data-preset="story"] .card {
+  --cm-card-bg: #ffffff;
+  --cm-bg: #ffffff;
+  --cm-fg: #1d1d1f;
+  --cm-muted: #57606a;
+  --cm-line: rgba(0, 0, 0, 0.08);
+  --cm-accent: #576b95;
+}
+.cm-app[data-preset="story"] .card[data-theme="dark"],
+.cm-app[data-preset="story"] .card[data-theme="night"] {
+  --cm-card-bg: #191919;
+  --cm-bg: #191919;
+  --cm-fg: rgba(255, 255, 255, 0.9);
+  --cm-muted: rgba(255, 255, 255, 0.62);
+  --cm-line: rgba(255, 255, 255, 0.12);
+  --cm-accent: #8aa4d6;
+}
 
 /* ---------- 2. 应用界面骨架 ---------- */
 .cm-app {
@@ -206,6 +223,17 @@
   overflow: hidden;
   min-height: 0;
 }
+.cm-story-tools {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  z-index: 12;
+}
+.cm-app[data-preset="story"] .cm-story-tools { display: flex; }
+.cm-story-tools[hidden] { display: none !important; }
 .cm-scaler {
   transform-origin: center center;
   /* 不加 transition：缩放需精确跟随舞台尺寸（开关编辑器/改窗口时由 ResizeObserver 实时重算），
@@ -783,6 +811,7 @@
 
 /* ---------- 9. 放映（全屏）模式 ---------- */
 .cm-app.is-present .cm-toolbar,
+.cm-app.is-present .cm-story-tools,
 .cm-app.is-present .cm-nav { opacity: 0; pointer-events: none; transition: opacity 0.25s; }
 .cm-app.is-present .cm-stage { background: #000; }
 .cm-app.is-present:hover .cm-nav { opacity: 1; pointer-events: auto; }

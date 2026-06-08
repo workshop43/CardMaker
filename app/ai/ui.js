@@ -759,7 +759,7 @@ async function runDesign(app) {
     applySections(app);
     app.goTo(0);
     if (S.preset === "story") {
-      m.setHtml("公众号长文已生成，请查看左侧画布。确认后可点击顶部「复制公众号 HTML」，粘贴到公众号编辑器。");
+      m.setHtml("公众号长文已生成，请查看左侧画布。确认后可点击画布旁的「复制公众号 HTML」，粘贴到公众号编辑器。");
       setMsgActions(m.el, [
         { label: "重新生成长文", onClick: () => resetInitialPagesAndDesign(app) },
       ]);

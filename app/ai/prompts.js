@@ -18,7 +18,7 @@ const FONTS = "hei(现代黑) song(编辑宋) kai(文学楷) smiley(潮流标题
 function mediumBlock(preset, P) {
   if (preset === "story") {
     return "这是一套【微信公众号图文排版】：" + P.label + "，预览画布 " + P.w + "×" + P.h +
-      "px。最终会复制为微信公众号编辑器可识别的 HTML 片段，所以内容应像一篇可连续阅读的公众号文章：清晰标题、导语、小标题、段落、重点卡片/引用/分隔，而不是全屏海报。视觉、排版、字号、配色完全由你做主。";
+      "px。最终会复制为微信公众号编辑器可识别的 HTML 片段；预览区模拟公众号正文编辑区，标题属于公众号后台单独字段，不放进正文预览。内容应像一篇可连续阅读的公众号文章正文：导语、小标题、段落、重点卡片/引用/分隔，而不是全屏海报。视觉、排版、字号、配色完全由你做主。";
   }
   const seen = preset === "ppt" ? "在投影 / 大屏上看" : "发社交平台、在手机上看（会被缩小）";
   return "这是一张【要导出成图片】的固定尺寸版面：" + P.label + "，精确 " + P.w + "×" + P.h +
@@ -39,7 +39,8 @@ function canvasBlock(preset, P) {
       "【硬约束】",
       "- 一个 <section class=\"card\"> 承载整篇微信公众号长文，基准宽度 " + P.w + "px，最小预览高度 " + P.h + "px；页面不分页，允许纵向变长滚动。",
       "- 公众号排版没有页眉、页脚、页码；不要输出 .cm-header、.cm-footer、.cm-page。",
-      "- 主体内容放进 .cm-main；按微信公众号文章阅读体验组织标题、导语、小标题、段落、引用、重点块和分隔。",
+      "- 主体内容放进 .cm-main；不要在 .cm-main 里输出文章主标题，直接从正文导语/段落/小标题开始。",
+      "- 预览可以用 data-theme=\"light\" / \"dark\" 模拟公众号亮色/暗色阅读颜色；复制出的公众号 HTML 不依赖背景色。",
       "- 自定义背景务必同时设文字色（深底配浅字、浅底配深字），别只改背景不改 --cm-fg。",
       "- 禁止 <html>/<head>/<body>、``` 围栏、解释文字、<script>、外链图片/字体/CSS。换字体用 data-font（" + FONTS + "）。",
       TOKENS,
@@ -80,7 +81,7 @@ function layoutBlock(preset) {
       "【版面结构 · 微信公众号长文】",
       "只输出一个 <section class=\"card\">，内部使用 <div class=\"cm-main\">…</div> 承载整篇文章正文。",
       "- 不要输出 .cm-header / .cm-footer / .cm-page；公众号文章没有卡片页眉、页脚和页码。",
-      "- .cm-main 里从上到下组织：标题、导语、章节、小标题、段落、引用、重点块、分隔等文章模块。",
+      "- .cm-main 里从上到下组织：导语、章节、小标题、段落、引用、重点块、分隔等文章模块；不要放文章主标题。",
       "- 这是单篇长页面，不要拆页，也不要设计成全屏海报。",
     ].join("\n");
   }
@@ -129,7 +130,7 @@ function roleLayoutPolicy(preset) {
     return [
       "【页面角色与布局】",
       "- 微信公众号模式只有一篇长文页面，role 通常用 content。",
-      "- 不需要 cover/ending/quote 的分页角色结构；标题、引言、结尾都作为文章正文模块放在同一个 .cm-main 内。",
+      "- 不需要 cover/ending/quote 的分页角色结构；page.title/subtitle 只作为元信息，不作为正文标题输出；引言、结尾作为文章正文模块放在同一个 .cm-main 内。",
     ].join("\n");
   }
   return ROLE_LAYOUT_POLICY;
@@ -172,7 +173,7 @@ export function planPrompt(preset, pages, topic, context) {
     ? "页数：恰好 " + pages + " 页（pages 数组长度必须是 " + pages + "）。"
     : "页数：结合主题、受众、内容复杂度和输入约束自行决定。";
   const storyLine = isStory
-    ? "微信公众号模式：pages[0] 承载整篇文章，把完整标题、导语、章节、小标题、段落、引用/重点块都放进这一页的 content；根据内容需要给 6~12 条 content，不要拆成多页。"
+    ? "微信公众号模式：pages[0] 承载整篇文章正文。title/subtitle 是元信息；正文从 content 的导语、章节、小标题、段落、引用/重点块开始，根据内容需要给 6~12 条 content，不要拆成多页。"
     : "整套连续叙事：页与页有承接（总分/递进/起承转合）。每个内容页是能独立读懂的小章节。";
   const contentLine = isStory
     ? "公众号长文页的 content 要覆盖完整文章结构（每条 heading + 完整 text），文字写完整、能直接读，就是最终进入公众号的正文。"

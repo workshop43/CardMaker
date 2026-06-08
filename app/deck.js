@@ -240,7 +240,6 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.btnPresent = el("button", "cm-btn", "放映");
     this.btnImport = el("button", "cm-btn", "导入 HTML");
     this.btnSave = el("button", "cm-btn", "导出 HTML");
-    this.btnWechat = el("button", "cm-btn", "复制公众号 HTML");
     this.btnExport = el("button", "cm-btn", "当前页导出 PNG");
     this.btnExportAll = el("button", "cm-btn cm-primary", "打包导出 PNG");
     this.fileImport = el("input");
@@ -253,7 +252,6 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       bar.appendChild(this.btnImport);
       bar.appendChild(this.fileImport);
       bar.appendChild(this.btnSave);
-      bar.appendChild(this.btnWechat);
       bar.appendChild(this.btnExport);
       bar.appendChild(this.btnExportAll);
     }
@@ -270,6 +268,12 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.cardsWrap = el("div", "cm-cards");
     this.scaler.appendChild(this.cardsWrap);
     stage.appendChild(this.scaler);
+    if (!this.view) {
+      this.storyTools = el("div", "cm-story-tools");
+      this.btnWechat = el("button", "cm-btn cm-primary", "复制公众号 HTML");
+      this.storyTools.appendChild(this.btnWechat);
+      stage.appendChild(this.storyTools);
+    }
 
     if (!this.view) body.appendChild(this.editor);
     body.appendChild(stage);
@@ -311,7 +315,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.btnImport.onclick = function () { self.fileImport.click(); };
     this.fileImport.onchange = function () { self._handleImportFile(self.fileImport.files && self.fileImport.files[0]); };
     this.btnSave.onclick = function () { self.downloadHTML(); };
-    this.btnWechat.onclick = function () { self.copyWeChatHTML(); };
+    if (this.btnWechat) this.btnWechat.onclick = function () { self.copyWeChatHTML(); };
     this.textarea.addEventListener("input", function () { self._applyEditor(); });
     this._updatePresetTools();
   };
@@ -502,13 +506,14 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.cards.forEach(function (card, i) {
       var main = card.querySelector(".cm-main") || card;
       var wrap = document.createElement("section");
+      var cardCS = getComputedStyle(card);
       wrap.setAttribute("style", [
         "box-sizing:border-box",
         "margin:" + (i ? "22px 0 0" : "0"),
-        "padding:22px 18px",
-        "border-radius:14px",
-        "background:" + safeColor(getComputedStyle(card).backgroundColor, "#ffffff"),
-        "color:" + safeColor(getComputedStyle(card).color, "#1f2937"),
+        "padding:0",
+        "color:" + safeColor(cardCS.color, "#1f2937"),
+        "font-size:" + roundPx(px(cardCS.fontSize) || 16) + "px",
+        "line-height:" + lineHeightValue(cardCS),
         "font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',Arial,sans-serif",
       ].join(";") + ";");
       Array.prototype.forEach.call(main.childNodes, function (node) {
@@ -518,7 +523,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       });
       parts.push(wrap.outerHTML);
     });
-    return '<section style="box-sizing:border-box;max-width:677px;margin:0 auto;padding:0;color:#1f2937;font-size:16px;line-height:1.8;">' +
+    return '<section style="box-sizing:border-box;max-width:430px;margin:0 auto;padding:0;color:#1f2937;font-size:16px;line-height:1.8;">' +
       parts.join("\n") + "</section>";
   };
 
@@ -557,30 +562,27 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   function wechatStyle(node, tag) {
     var cs = getComputedStyle(node);
     var font = px(cs.fontSize);
-    var line = px(cs.lineHeight);
     var styles = [
       "box-sizing:border-box",
       "max-width:100%",
       "color:" + safeColor(cs.color, "#1f2937"),
-      "font-size:" + roundPx(clamp(font * 0.52, tag === "h1" ? 24 : 13, tag === "h1" ? 30 : tag === "h2" ? 26 : 18)) + "px",
-      "line-height:" + roundPx(clamp(line && font ? line / font : 1.75, 1.35, 2)),
+      "font-size:" + roundPx(font || 16) + "px",
+      "line-height:" + lineHeightValue(cs),
       "font-weight:" + cs.fontWeight,
       "text-align:" + cs.textAlign,
     ];
-    var bg = safeColor(cs.backgroundColor, "");
-    if (bg && bg !== "rgba(0, 0, 0, 0)") styles.push("background-color:" + bg);
     ["marginTop", "marginRight", "marginBottom", "marginLeft", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"].forEach(function (prop) {
       var value = px(cs[prop]);
-      if (value) styles.push(cssName(prop) + ":" + roundPx(value * 0.45) + "px");
+      if (value) styles.push(cssName(prop) + ":" + roundPx(value) + "px");
     });
     if (cs.borderStyle !== "none" && px(cs.borderWidth)) {
-      styles.push("border:" + roundPx(px(cs.borderWidth) * 0.45) + "px " + cs.borderStyle + " " + safeColor(cs.borderColor, "#e5e7eb"));
+      styles.push("border:" + roundPx(px(cs.borderWidth)) + "px " + cs.borderStyle + " " + safeColor(cs.borderColor, "#e5e7eb"));
     }
     if (px(cs.borderLeftWidth) >= 3 && cs.borderLeftStyle !== "none") {
-      styles.push("border-left:" + roundPx(px(cs.borderLeftWidth) * 0.45) + "px " + cs.borderLeftStyle + " " + safeColor(cs.borderLeftColor, "#4f46e5"));
+      styles.push("border-left:" + roundPx(px(cs.borderLeftWidth)) + "px " + cs.borderLeftStyle + " " + safeColor(cs.borderLeftColor, "#4f46e5"));
     }
     var radius = px(cs.borderRadius);
-    if (radius) styles.push("border-radius:" + roundPx(radius * 0.45) + "px");
+    if (radius) styles.push("border-radius:" + roundPx(radius) + "px");
     if (tag === "img") styles.push("display:block;width:100%;height:auto");
     return styles.join(";") + ";";
   }
@@ -609,12 +611,19 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     return isFinite(n) ? n : 0;
   }
 
-  function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value || min));
-  }
-
   function roundPx(value) {
     return Math.round(value * 10) / 10;
+  }
+
+  function lineHeightValue(cs) {
+    var font = px(cs.fontSize) || 16;
+    var line = px(cs.lineHeight);
+    if (line && font) return roundUnit(line / font);
+    return cs.lineHeight && cs.lineHeight !== "normal" ? cs.lineHeight : "1.75";
+  }
+
+  function roundUnit(value) {
+    return Math.round(value * 100) / 100;
   }
 
   // 保存为自包含 HTML 文件：同源的 cardmaker.css/js 内联进去，双击即可打开、再编辑、再出图
@@ -1126,6 +1135,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
 
   CardMaker.prototype._updatePresetTools = function () {
     if (this.btnWechat) this.btnWechat.hidden = this.preset !== "story";
+    if (this.storyTools) this.storyTools.hidden = this.preset !== "story";
   };
 
   // 切到某比例并载入其示例（示例独立存放在 examples/<preset>.html，按需 fetch 注入）
