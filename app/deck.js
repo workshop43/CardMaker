@@ -522,6 +522,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       var cardCS = getComputedStyle(card);
       wrap.setAttribute("style", [
         "box-sizing:border-box",
+        "display:block",
         "margin:" + (i ? "22px 0 0" : "0"),
         "padding:0",
         "color:" + safeColor(cardCS.color, "#1f2937"),
@@ -536,7 +537,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       });
       parts.push(wrap.outerHTML);
     });
-    return '<section style="box-sizing:border-box;max-width:430px;margin:0 auto;padding:0;color:#1f2937;font-size:16px;line-height:1.8;">' +
+    return '<section style="box-sizing:border-box;display:block;max-width:430px;margin:0 auto;padding:0;color:#1f2937;font-size:16px;line-height:1.8;">' +
       parts.join("\n") + "</section>";
   };
 
@@ -569,8 +570,8 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
 
   function wechatTag(node) {
     var tag = (node.tagName || "div").toLowerCase();
-    if (tag === "blockquote") return "section";
-    return /^(section|div|p|span|strong|em|b|i|u|h1|h2|h3|h4|blockquote|ul|ol|li|a|img|br)$/i.test(tag) ? tag : "section";
+    if (/^(span|strong|em|b|i|u|a|img|br)$/i.test(tag)) return tag;
+    return "section";
   }
 
   function wechatStyle(node, tag) {
@@ -578,7 +579,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var font = px(cs.fontSize);
     var styles = [
       "box-sizing:border-box",
-      "max-width:100%",
+      "display:" + wechatDisplay(tag, cs),
       "color:" + safeColor(cs.color, "#1f2937"),
       "font-size:" + roundPx(font || 16) + "px",
       "line-height:" + lineHeightValue(cs),
@@ -586,7 +587,6 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       "text-align:" + cs.textAlign,
     ];
     pushTextStyles(styles, cs);
-    pushLayoutStyles(styles, cs, tag);
     ["marginTop", "marginRight", "marginBottom", "marginLeft", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"].forEach(function (prop) {
       var value = px(cs[prop]);
       if (value) styles.push(cssName(prop) + ":" + roundPx(value) + "px");
@@ -595,42 +595,19 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var radius = px(cs.borderRadius);
     if (radius) styles.push("border-radius:" + roundPx(radius) + "px");
     pushPaintStyles(styles, cs);
+    if (tag !== "span" && tag !== "strong" && tag !== "em" && tag !== "b" && tag !== "i" && tag !== "u" && tag !== "a") {
+      styles.push("max-width:100%");
+    }
     if (tag === "img") styles.push("display:block;width:100%;height:auto");
     return styles.join(";") + ";";
   }
 
-  // 微信公众号粘贴通常不会保留外部 CSS。这里把影响排版和装饰的计算样式尽量写入节点。
-  function pushLayoutStyles(styles, cs, tag) {
-    var display = cs.display;
-    if (display && display !== "inline" && display !== "contents") styles.push("display:" + display);
-    if (/^(flex|inline-flex)$/i.test(display)) {
-      ["flexDirection", "flexWrap", "alignItems", "justifyContent"].forEach(function (prop) {
-        if (cs[prop]) styles.push(cssName(prop) + ":" + cs[prop]);
-      });
-      pushGap(styles, cs);
+  function wechatDisplay(tag, cs) {
+    if (tag === "img" || tag === "br") return tag === "img" ? "block" : "inline";
+    if (/^(span|strong|em|b|i|u|a)$/i.test(tag)) {
+      return /inline-block/i.test(cs.display) ? "inline-block" : "inline";
     }
-    if (/^(grid|inline-grid)$/i.test(display)) {
-      ["gridTemplateColumns", "gridTemplateRows", "alignItems", "justifyContent"].forEach(function (prop) {
-        if (cs[prop] && cs[prop] !== "none") styles.push(cssName(prop) + ":" + cs[prop]);
-      });
-      pushGap(styles, cs);
-    }
-    if (!/^(span|strong|em|b|i|u|a)$/i.test(tag)) {
-      pushSize(styles, cs, "width");
-      pushSize(styles, cs, "minHeight");
-    }
-  }
-
-  function pushGap(styles, cs) {
-    var row = px(cs.rowGap);
-    var col = px(cs.columnGap);
-    if (row) styles.push("row-gap:" + roundPx(row) + "px");
-    if (col) styles.push("column-gap:" + roundPx(col) + "px");
-  }
-
-  function pushSize(styles, cs, prop) {
-    var value = px(cs[prop]);
-    if (value && isFinite(value)) styles.push(cssName(prop) + ":" + roundPx(value) + "px");
+    return "block";
   }
 
   function pushTextStyles(styles, cs) {
@@ -649,7 +626,6 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       if (width && style !== "none") {
         var prefix = "border-" + side.toLowerCase();
         var color = safeColor(cs["border" + side + "Color"], "#e5e7eb");
-        styles.push(prefix + ":" + roundPx(width) + "px " + style + " " + color);
         styles.push(prefix + "-width:" + roundPx(width) + "px");
         styles.push(prefix + "-style:" + style);
         styles.push(prefix + "-color:" + color);
@@ -659,12 +635,10 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
 
   function pushPaintStyles(styles, cs) {
     var bg = safeColor(cs.backgroundColor, "");
-    if (bg) styles.push("background-color:" + bg);
-    if (cs.backgroundImage && cs.backgroundImage !== "none") styles.push("background-image:" + cs.backgroundImage);
-    if (cs.backgroundSize && cs.backgroundSize !== "auto") styles.push("background-size:" + cs.backgroundSize);
-    if (cs.backgroundPosition && cs.backgroundPosition !== "0% 0%") styles.push("background-position:" + cs.backgroundPosition);
-    if (cs.backgroundRepeat && cs.backgroundRepeat !== "repeat") styles.push("background-repeat:" + cs.backgroundRepeat);
-    if (cs.boxShadow && cs.boxShadow !== "none") styles.push("box-shadow:" + cs.boxShadow);
+    if (bg) {
+      styles.push("background:" + bg);
+      styles.push("background-color:" + bg);
+    }
     var opacity = parseFloat(cs.opacity);
     if (isFinite(opacity) && opacity < 1) styles.push("opacity:" + opacity);
   }
@@ -807,7 +781,42 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   }
 
   function safeColor(value, fallback) {
-    return value && value !== "transparent" && !/rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/i.test(value) ? value : fallback;
+    var color = normalizeWechatColor(value);
+    return color || fallback;
+  }
+
+  function normalizeWechatColor(value) {
+    if (!value || value === "transparent" || /rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/i.test(value)) return "";
+    var text = String(value).trim();
+    var rgb = text.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/i);
+    if (rgb) return colorFromChannels(rgb[1], rgb[2], rgb[3], rgb[4]);
+    var srgb = text.match(/^color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)$/i);
+    if (srgb) return colorFromChannels(srgb[1] * 255, srgb[2] * 255, srgb[3] * 255, srgb[4]);
+    var hex = text.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hex) return expandHex(text);
+    return "";
+  }
+
+  function colorFromChannels(r, g, b, a) {
+    var alpha = a == null || a === "" ? 1 : Math.max(0, Math.min(1, parseFloat(a)));
+    var rr = clampColor(r), gg = clampColor(g), bb = clampColor(b);
+    if (alpha < 0.98) return "rgba(" + rr + "," + gg + "," + bb + "," + roundUnit(alpha) + ")";
+    return "#" + hex2(rr) + hex2(gg) + hex2(bb);
+  }
+
+  function clampColor(value) {
+    var n = Math.round(parseFloat(value));
+    return Math.max(0, Math.min(255, isFinite(n) ? n : 0));
+  }
+
+  function hex2(value) {
+    return ("0" + value.toString(16)).slice(-2);
+  }
+
+  function expandHex(value) {
+    var hex = value.toLowerCase();
+    if (hex.length === 4) return "#" + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+    return hex;
   }
 
   function px(value) {
