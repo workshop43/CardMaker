@@ -490,21 +490,17 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var html = this.getWeChatHTML();
     var self = this;
     if (!html) { this._toast("没有可复制的内容"); return; }
-    if (navigator.clipboard && window.ClipboardItem) {
-      var item = new ClipboardItem({
-        "text/html": new Blob([html], { type: "text/html" }),
-        "text/plain": new Blob([html], { type: "text/plain" }),
-      });
-      navigator.clipboard.write([item]).then(function () {
-        self._toast("已复制公众号 HTML");
-      }).catch(function () {
-        copyPlainText(html);
-        self._toast("已复制 HTML 源码");
-      });
+    if (copyRichHTMLFromDOM(html)) {
+      this._toast("已复制公众号富文本");
       return;
     }
-    copyPlainText(html);
-    this._toast("已复制 HTML 源码");
+    copyClipboardHTML(html).then(function (ok) {
+      if (ok) self._toast("已复制公众号 HTML");
+      else {
+        copyPlainText(html);
+        self._toast("已复制 HTML 源码");
+      }
+    });
   };
 
   // 输出适合粘贴到微信公众号编辑器的 HTML 片段。
@@ -673,6 +669,58 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     ta.select();
     try { document.execCommand("copy"); } catch (e) { /* ignore */ }
     ta.remove();
+  }
+
+  // 公众号编辑器对“从真实页面选中后复制”的富文本兼容性通常好于 ClipboardItem 写入的字符串。
+  function copyRichHTMLFromDOM(html) {
+    var host = document.createElement("div");
+    host.contentEditable = "true";
+    host.setAttribute("aria-hidden", "true");
+    host.style.cssText = [
+      "position:fixed",
+      "left:-100000px",
+      "top:0",
+      "width:430px",
+      "height:auto",
+      "overflow:visible",
+      "background:#fff",
+      "color:#1f2937",
+      "z-index:-1",
+      "pointer-events:none",
+      "user-select:text",
+      "-webkit-user-select:text",
+    ].join(";");
+    host.innerHTML = html;
+    document.body.appendChild(host);
+    var sel = window.getSelection && window.getSelection();
+    var range = document.createRange();
+    var ok = false;
+    try {
+      range.selectNodeContents(host);
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      ok = document.execCommand("copy");
+    } catch (e) {
+      ok = false;
+    }
+    if (sel) sel.removeAllRanges();
+    host.remove();
+    return ok;
+  }
+
+  function copyClipboardHTML(html) {
+    if (!navigator.clipboard || !window.ClipboardItem) return Promise.resolve(false);
+    var item = new ClipboardItem({
+      "text/html": new Blob([html], { type: "text/html" }),
+      "text/plain": new Blob([html], { type: "text/plain" }),
+    });
+    return navigator.clipboard.write([item]).then(function () {
+      return true;
+    }).catch(function () {
+      return false;
+    });
   }
 
   function cssName(prop) {
