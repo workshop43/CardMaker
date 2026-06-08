@@ -639,6 +639,12 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   }
 
   function pushDecorationSize(styles, node, tag, cs) {
+    if (isDecorationGroup(node)) {
+      styles.push("display:block");
+      styles.push("width:100%");
+      styles.push("text-align:center");
+      return;
+    }
     if (!isDecorationNode(node, tag, cs)) return;
     var width = px(cs.width);
     var height = px(cs.height);
