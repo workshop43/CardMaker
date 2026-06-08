@@ -20,7 +20,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     xiaohongshu: { w: 1080, h: 1440, label: "小红书 3:4" },
     square: { w: 1080, h: 1080, label: "方形 1:1" },
     ppt: { w: 1280, h: 720, label: "PPT 16:9" },
-    story: { w: 1080, h: 1920, label: "微信公众号排版" },
+    story: { w: 430, h: 932, label: "微信公众号排版" },
   };
   var BUILTIN_EXAMPLE_TITLES = {
     "3个写作习惯": true,

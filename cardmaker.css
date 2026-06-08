@@ -71,9 +71,9 @@
 }
 /* 微信公众号图文排版：纵向文章流预览，字号按可粘贴到公众号后的阅读密度控制 */
 .cm-app[data-preset="story"] {
-  --cm-pad: 88px;
-  --cm-text: 30px;  --cm-text-sm: 22px;  --cm-kicker: 24px;
-  --cm-h3: 36px;    --cm-h2: 46px;       --cm-h1: 60px;       --cm-display: 76px;
+  --cm-pad: 24px;
+  --cm-text: 16px;  --cm-text-sm: 13px;  --cm-kicker: 12px;
+  --cm-h3: 18px;    --cm-h2: 22px;       --cm-h1: 30px;       --cm-display: 36px;
 }
 
 /* ---------- 2. 应用界面骨架 ---------- */
@@ -240,7 +240,7 @@
 .cm-app[data-preset="ppt"] .cm-cards,
 .cm-app[data-preset="ppt"] .card { width: 1280px; height: 720px; }
 .cm-app[data-preset="story"] .cm-cards,
-.cm-app[data-preset="story"] .card { width: 1080px; min-height: 1920px; height: auto; }
+.cm-app[data-preset="story"] .card { width: 430px; min-height: 932px; height: auto; }
 .cm-app[data-preset="story"] .cm-stage { align-items: flex-start; overflow: auto; padding: 24px 0; }
 .cm-app[data-preset="story"] .cm-scaler { transform-origin: top center; }
 .cm-app[data-preset="story"] .card { justify-content: flex-start; overflow: visible; }

@@ -12,7 +12,7 @@
     xiaohongshu: { w: 1080, h: 1440 },
     square: { w: 1080, h: 1080 },
     ppt: { w: 1280, h: 720 },
-    story: { w: 1080, h: 1920 },
+    story: { w: 430, h: 932 },
   };
   // data-font 中文字体：优先系统字体栈；只有 css 非空的字体才按需懒加载。
   var FONTS = {
