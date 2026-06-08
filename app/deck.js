@@ -564,6 +564,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
 
   function wechatTag(node) {
     var tag = (node.tagName || "div").toLowerCase();
+    if (tag === "blockquote") return "section";
     return /^(section|div|p|span|strong|em|b|i|u|h1|h2|h3|h4|blockquote|ul|ol|li|a|img|br)$/i.test(tag) ? tag : "section";
   }
 
@@ -632,6 +633,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     if (cs.letterSpacing && cs.letterSpacing !== "normal") styles.push("letter-spacing:" + cs.letterSpacing);
     if (cs.textDecorationLine && cs.textDecorationLine !== "none") styles.push("text-decoration:" + cs.textDecorationLine);
     if (cs.whiteSpace && cs.whiteSpace !== "normal") styles.push("white-space:" + cs.whiteSpace);
+    if (cs.verticalAlign && cs.verticalAlign !== "baseline") styles.push("vertical-align:" + cs.verticalAlign);
   }
 
   function pushBorderStyles(styles, cs) {
@@ -640,7 +642,12 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       var width = px(cs["border" + side + "Width"]);
       var style = cs["border" + side + "Style"];
       if (width && style !== "none") {
-        styles.push("border-" + side.toLowerCase() + ":" + roundPx(width) + "px " + style + " " + safeColor(cs["border" + side + "Color"], "#e5e7eb"));
+        var prefix = "border-" + side.toLowerCase();
+        var color = safeColor(cs["border" + side + "Color"], "#e5e7eb");
+        styles.push(prefix + ":" + roundPx(width) + "px " + style + " " + color);
+        styles.push(prefix + "-width:" + roundPx(width) + "px");
+        styles.push(prefix + "-style:" + style);
+        styles.push(prefix + "-color:" + color);
       }
     });
   }

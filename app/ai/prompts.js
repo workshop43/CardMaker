@@ -45,6 +45,7 @@ function canvasBlock(preset, P) {
       "- 预览可以用 data-theme=\"light\" / \"dark\" 模拟公众号亮色/暗色阅读颜色；整篇文章外层和 .cm-main 不要加背景色。",
       "- 正文组件可以使用背景、渐变和阴影，但必须兼容 light/dark：默认正文、次要文字、边框、普通组件底色、阴影可使用 --cm-fg / --cm-muted / --cm-line / --cm-surface / --cm-surface-strong / --cm-shadow 等变量自适应；具有明确设计含义的强调字色/装饰色可以使用具体色值，但要在亮色和暗色阅读背景上都清晰可读。",
       "- 公众号复制 HTML 主要依赖 inline style；不要用 ::before / ::after 承载关键图标、编号、分割线、装饰文字或列表符号，必须用真实 DOM 节点（span/div/section）表达。",
+      "- 引用块不要用 <blockquote>，用 <section>/<div> + class 表达，并在共享样式里定义 background、padding、border-left、border-radius；导出时这些会内联到真实节点。",
       "- 设计倾向简约：少用复杂图标分割线、重阴影、大色块和密集装饰；优先用留白、字号、行距、细线、轻量强调色建立层级。",
       "- 禁止 <html>/<head>/<body>、``` 围栏、解释文字、<script>、外链图片/字体/CSS。换字体用 data-font（" + FONTS + "）。",
       TOKENS,
@@ -87,7 +88,8 @@ function layoutBlock(preset) {
       "- 不要输出 .cm-header / .cm-footer / .cm-page；公众号文章没有卡片页眉、页脚和页码。",
       "- .cm-main 里从上到下组织：导语、章节、小标题、段落、引用、重点块、分隔等文章模块；不要放文章主标题。",
       "- 这是单篇长页面，不要拆页，也不要设计成全屏海报。",
-      "- 列表和分隔模块要用真实元素排版，不要依赖 list-style 或伪元素；图标与文字同一行时用真实 span 并控制 white-space / line-height，避免复制到公众号后异常折行。",
+      "- 列表和分隔模块要用真实元素排版，不要依赖 list-style 或伪元素；图标与文字同一行时用真实 span，并使用 display:inline-block、vertical-align:middle、line-height 和 text-align 控制，不要依赖 flex 居中。",
+      "- 预览和复制 HTML 都按普通正文流计算段间距；不要用 .cm-main 的 gap 或过大的 margin 撑开章节，段落/章节间距写在具体正文模块上。",
     ].join("\n");
   }
   return LAYOUT;
@@ -119,6 +121,7 @@ function componentPolicy(preset) {
       "- 整篇文章外层和 .cm-main 不使用背景色；重点块、引用、卡片等局部组件可以有背景、渐变、阴影。默认中性色可用 light/dark 兼容变量自适应；有明确设计意图的强调色可以写成具体色值，但必须在 light/dark 预览下都可读。",
       "- 视觉系统集中在 deck 级 <style>，正文组件可通过语义 class 复用。",
       "- 不要使用 ::before / ::after 做关键视觉；公众号导出的关键分隔线、图标、序号、列表符号都必须是正文里的真实 DOM。",
+      "- 引用块使用 section/div，不使用 blockquote；分割线图标用真实 span 且 inline-block + vertical-align:middle，不依赖 flex 居中。",
       "- 整体设计克制，局部组件可以有轻量背景/渐变/阴影，但不要让文章看起来像多张卡片堆叠或海报拼贴。",
       "- 可以自行设计 DOM 结构和正文组件组合；最终要像一篇可复制到公众号编辑器的长文。",
     ].join("\n");
