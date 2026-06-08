@@ -35,6 +35,9 @@ const TOKENS =
 const COLOR_INTENT =
   "【配色原则】配色应根据内容要表达的主题、情绪、受众、场景和传播目的自行设计；不要套固定色板，不要默认单色主题，也不要为了统一而牺牲信息层级。";
 
+const STORY_AESTHETIC =
+  "【公众号高级审美原则】整体应像高质量杂志长文/精品专栏，而不是海报拼贴或廉价模板：建立清晰字阶、舒适行距、稳定段距和有呼吸感的留白；用少量但准确的强调色服务内容语气；引用、重点块、分隔线要克制、精致、轻量，不使用花哨图标、厚重大色块、过多圆角阴影、渐变堆叠、卡片堆砌、土味装饰或强行可爱化元素。";
+
 function canvasBlock(preset, P) {
   if (preset === "story") {
     return [
@@ -47,6 +50,7 @@ function canvasBlock(preset, P) {
       "- 公众号复制 HTML 主要依赖 inline style；不要用 ::before / ::after 承载关键图标、编号、分割线、装饰文字或列表符号，必须用真实 DOM 节点（span/div/section）表达。",
       "- 引用块不要用 <blockquote>，用 <section>/<div> + class 表达，并在共享样式里定义 background、padding、border-left、border-radius；导出时这些会内联到真实节点。",
       "- 设计倾向简约：少用复杂图标分割线、重阴影、大色块和密集装饰；优先用留白、字号、行距、细线、轻量强调色建立层级。",
+      STORY_AESTHETIC,
       "- 禁止 <html>/<head>/<body>、``` 围栏、解释文字、<script>、外链图片/字体/CSS。换字体用 data-font（" + FONTS + "）。",
       TOKENS,
     ].join("\n");
@@ -123,6 +127,7 @@ function componentPolicy(preset) {
       "- 不要使用 ::before / ::after 做关键视觉；公众号导出的关键分隔线、图标、序号、列表符号都必须是正文里的真实 DOM。",
       "- 引用块使用 section/div，不使用 blockquote；分割线图标用真实 span 且 inline-block + vertical-align:middle，不依赖 flex 居中。",
       "- 整体设计克制，局部组件可以有轻量背景/渐变/阴影，但不要让文章看起来像多张卡片堆叠或海报拼贴。",
+      "- 审美目标是高端、清爽、耐读、有内容气质；避免土味公众号模板感。",
       "- 可以自行设计 DOM 结构和正文组件组合；最终要像一篇可复制到公众号编辑器的长文。",
     ].join("\n");
   }
@@ -408,6 +413,7 @@ export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML
     "可按用户意见精确修改已有 selector/class 规则，也可补充新的 class 规则；保留不相关规则和当前视觉系统。",
     "可调整配色 / 强调色、字体、组件外观、整体风格、跨页组件规范——设计判断由你做主。",
     COLOR_INTENT,
+    preset === "story" ? STORY_AESTHETIC : "",
     preset === "story"
       ? "可调整导语、段落、小标题、引用、重点块、分隔等正文组件的样式、间距、层级和密度一致性；不要引入 header/footer/page number；不要给整篇文章外层或 .cm-main 添加背景色；局部组件的背景、渐变、阴影必须兼容 light/dark；整体偏简约清爽，不要堆过多修饰。"
       : "可调整 header/footer/title/subtitle/page number/内容块/section label 等跨页组件的样式、间距、层级和密度一致性。",
