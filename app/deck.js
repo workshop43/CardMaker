@@ -566,27 +566,11 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   }
 
   function appendWechatChildren(out, source) {
-    var prev = null;
     Array.prototype.forEach.call(source.childNodes, function (child) {
       var cloned = cloneWechatNode(child);
       if (!cloned) return;
-      if (prev && shouldInsertStructuralBreak(prev, child)) out.appendChild(document.createElement("br"));
       out.appendChild(cloned);
-      prev = child;
     });
-  }
-
-  function shouldInsertStructuralBreak(prev, next) {
-    return isWechatBlockSource(prev) && isWechatBlockSource(next);
-  }
-
-  function isWechatBlockSource(node) {
-    if (!node || node.nodeType !== 1 || isRuntimeChrome(node)) return false;
-    var tag = String(node.tagName || "").toLowerCase();
-    if (/^(br|span|strong|em|b|i|u|a|img)$/i.test(tag)) return false;
-    var display = "";
-    try { display = getComputedStyle(node).display || ""; } catch (e) { display = ""; }
-    return !/^inline/i.test(display);
   }
 
   function cloneWechatTextNode(text) {
@@ -644,6 +628,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   function wechatDisplay(tag, cs) {
     if (tag === "img" || tag === "br") return tag === "img" ? "block" : "inline";
     if (/^(span|strong|em|b|i|u|a)$/i.test(tag)) {
+      if (/^block$/i.test(cs.display)) return "block";
       return /inline-block/i.test(cs.display) ? "inline-block" : "inline";
     }
     return "block";
