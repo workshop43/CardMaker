@@ -78,9 +78,9 @@ python3 -m http.server 8765
 
 点击工具栏的「导入 HTML」，选择之前通过「导出 HTML」下载的 `.html` 文件，CardMaker 会自动提取文件里的 `[data-cardmaker]` deck，同步原来的比例、标题、字体和卡片内容。
 
-## 上传 Markdown 生成 PPT
+## 上传 Markdown 生成当前模版内容
 
-在右侧 AI 助手输入框附近点击「上传 MD」，选择 `.md` / `.markdown` 文件。AI 助手会切到 PPT 16:9，根据 Markdown 内容生成一套演示 deck。需要先配置 API Key。
+先在比例选择器里选好要生成的模版，再在右侧 AI 助手输入框附近点击「上传 MD」，选择 `.md` / `.markdown` 文件。AI 助手会按当前模版根据 Markdown 内容生成 deck；例如当前是「微信公众号排版」时，会生成公众号长文而不是切到 PPT。需要先配置 API Key。
 
 ## 公众号 HTML
 

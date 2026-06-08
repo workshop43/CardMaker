@@ -447,7 +447,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       detail: { markdown: String(markdown || ""), filename: filename || "deck.md", app: this },
     });
     this.app.dispatchEvent(ev);
-    if (!ev.defaultPrevented) this._toast("Markdown 生成 PPT 需要启用 AI 助手");
+    if (!ev.defaultPrevented) this._toast("Markdown 生成当前模版内容需要启用 AI 助手");
     return ev.defaultPrevented;
   };
 
