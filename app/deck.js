@@ -618,6 +618,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var radius = px(cs.borderRadius);
     if (radius) styles.push("border-radius:" + roundPx(radius) + "px");
     pushPaintStyles(styles, cs);
+    pushDecorationSize(styles, node, tag, cs);
     if (tag !== "span" && tag !== "strong" && tag !== "em" && tag !== "b" && tag !== "i" && tag !== "u" && tag !== "a") {
       styles.push("max-width:100%");
     }
@@ -632,6 +633,22 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       return /inline-block/i.test(cs.display) ? "inline-block" : "inline";
     }
     return "block";
+  }
+
+  function pushDecorationSize(styles, node, tag, cs) {
+    var hasText = String(node.textContent || "").trim();
+    var bg = safeColor(cs.backgroundColor, "");
+    var border = px(cs.borderTopWidth) || px(cs.borderRightWidth) || px(cs.borderBottomWidth) || px(cs.borderLeftWidth);
+    var decorative = !hasText && (bg || border || /^(span|section)$/i.test(tag));
+    if (!decorative) return;
+    var width = px(cs.width);
+    var height = px(cs.height);
+    if (width) styles.push("width:" + roundPx(width) + "px");
+    if (height) styles.push("height:" + roundPx(height) + "px");
+    if (tag === "span" && width && height) {
+      styles.push("display:inline-block");
+      styles.push("vertical-align:middle");
+    }
   }
 
   function pushTextStyles(styles, cs) {
