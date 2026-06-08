@@ -561,11 +561,19 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     if (style) out.setAttribute("style", style);
     if (node.tagName === "A" && node.getAttribute("href")) out.setAttribute("href", node.getAttribute("href"));
     if (node.tagName === "IMG" && node.getAttribute("src")) out.setAttribute("src", node.getAttribute("src"));
-    Array.prototype.forEach.call(node.childNodes, function (child) {
-      var cloned = cloneWechatNode(child);
-      if (cloned) out.appendChild(cloned);
-    });
+    appendWechatChildren(out, node);
     return out;
+  }
+
+  function appendWechatChildren(out, source) {
+    var prev = null;
+    Array.prototype.forEach.call(source.childNodes, function (child) {
+      var cloned = cloneWechatNode(child);
+      if (!cloned) return;
+      if (prev && shouldInsertRenderedBreak(prev, child)) out.appendChild(document.createElement("br"));
+      out.appendChild(cloned);
+      prev = child;
+    });
   }
 
   function cloneWechatTextNode(text) {
@@ -578,6 +586,52 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       if (line) frag.appendChild(document.createTextNode(line));
     });
     return frag;
+  }
+
+  function shouldInsertRenderedBreak(prev, next) {
+    if (isExplicitBreak(prev) || isExplicitBreak(next)) return false;
+    var a = renderedRect(prev, true);
+    var b = renderedRect(next, false);
+    if (!a || !b) return false;
+    return Math.round(b.top - a.top) > 2;
+  }
+
+  function isExplicitBreak(node) {
+    return node && node.nodeType === 1 && String(node.tagName || "").toLowerCase() === "br";
+  }
+
+  function renderedRect(node, last) {
+    var rects = renderedRects(node);
+    if (!rects) return null;
+    if (last) {
+      for (var i = rects.length - 1; i >= 0; i--) {
+        if (rects[i].width || rects[i].height) return rects[i];
+      }
+      return null;
+    }
+    for (var j = 0; j < rects.length; j++) {
+      if (rects[j].width || rects[j].height) return rects[j];
+    }
+    return null;
+  }
+
+  function renderedRects(node) {
+    var rects;
+    if (!node) return null;
+    if (node.nodeType === 3) {
+      if (!node.textContent || !node.textContent.trim()) return null;
+      var range = document.createRange();
+      try {
+        range.selectNodeContents(node);
+        rects = range.getClientRects();
+      } catch (e) {
+        rects = null;
+      }
+      range.detach && range.detach();
+    } else if (node.nodeType === 1) {
+      rects = node.getClientRects && node.getClientRects();
+    }
+    return rects || null;
   }
 
   function wechatTag(node) {
