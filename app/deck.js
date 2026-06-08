@@ -607,7 +607,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       "font-size:" + roundPx(font || 16) + "px",
       "line-height:" + lineHeightValue(cs),
       "font-weight:" + cs.fontWeight,
-      "text-align:" + cs.textAlign,
+      "text-align:" + (isDecorationGroup(node) ? "center" : cs.textAlign),
     ];
     pushTextStyles(styles, cs);
     ["marginTop", "marginRight", "marginBottom", "marginLeft", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"].forEach(function (prop) {
@@ -648,7 +648,18 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     if (tag === "span" && width && height) {
       styles.push("display:inline-block");
       styles.push("vertical-align:middle");
+      styles.push("margin-left:4px");
+      styles.push("margin-right:4px");
     }
+    if (isDecorationGroup(node)) styles.push("text-align:center");
+  }
+
+  function isDecorationGroup(node) {
+    if (!node || node.nodeType !== 1 || String(node.textContent || "").trim()) return false;
+    var children = Array.prototype.filter.call(node.childNodes || [], function (child) {
+      return child.nodeType === 1 && !String(child.textContent || "").trim();
+    });
+    return children.length >= 2;
   }
 
   function pushTextStyles(styles, cs) {
