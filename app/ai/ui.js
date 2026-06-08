@@ -223,7 +223,11 @@ function setMsgActions(msgEl, actions) {
   row.innerHTML = "";
   actions.forEach((a) => {
     const b = el("button", "cm-btn" + (a.primary ? " cm-primary" : ""), a.label);
-    b.onclick = a.onClick; row.appendChild(b);
+    b.onclick = () => {
+      row.innerHTML = '<span class="cm-msg-choice">已选择：' + escapeHtml(a.label) + "</span>";
+      a.onClick && a.onClick();
+    };
+    row.appendChild(b);
   });
 }
 
@@ -1129,6 +1133,7 @@ function slug(s) {
 // ─── 辅助 ─────────────────────────────────────────────────────────────────────
 function applySections(app) {
   const html = (S.designStyle || "") + "\n" + S.sections.filter(Boolean).join("\n");
+  if (S.plan && S.plan.title) app.title = S.plan.title;
   app.setHTML(html);
   refreshSessionSectionsFromDeck(app);
   app.goTo(Math.max(0, S.sections.filter(Boolean).length - 1));

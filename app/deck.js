@@ -276,8 +276,14 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       this.btnStoryDark = el("button", "cm-story-theme-btn", "Dark");
       this.storyThemeToggle.appendChild(this.btnStoryLight);
       this.storyThemeToggle.appendChild(this.btnStoryDark);
+      this.storyTitle = el("div", "cm-story-title");
+      this.storyTitleText = el("span", "cm-story-title-text", "");
+      this.btnStoryCopyTitle = el("button", "cm-story-title-copy", "复制标题");
+      this.storyTitle.appendChild(this.storyTitleText);
+      this.storyTitle.appendChild(this.btnStoryCopyTitle);
       this.btnWechat = el("button", "cm-btn cm-primary", "复制公众号 HTML");
       this.btnWechatBuffer = el("button", "cm-btn", "复制区");
+      this.storyTools.appendChild(this.storyTitle);
       this.storyTools.appendChild(this.storyThemeToggle);
       this.storyTools.appendChild(this.btnWechat);
       this.storyTools.appendChild(this.btnWechatBuffer);
@@ -326,6 +332,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.btnSave.onclick = function () { self.downloadHTML(); };
     if (this.btnWechat) this.btnWechat.onclick = function () { self.copyWeChatHTML(); };
     if (this.btnWechatBuffer) this.btnWechatBuffer.onclick = function () { self.openWeChatCopyBuffer(); };
+    if (this.btnStoryCopyTitle) this.btnStoryCopyTitle.onclick = function () { self.copyStoryTitle(); };
     if (this.btnStoryLight) this.btnStoryLight.onclick = function () { self.setStoryTheme("light"); };
     if (this.btnStoryDark) this.btnStoryDark.onclick = function () { self.setStoryTheme("dark"); };
     this.textarea.addEventListener("input", function () { self._applyEditor(); });
@@ -1041,6 +1048,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.btnPrev.disabled = this.index <= 0;
     this.btnNext.disabled = this.index >= this.cards.length - 1;
     this._syncStoryThemeTools();
+    this._syncStoryTitle();
   };
 
   // 等比缩放，让当前卡片铺满舞台
@@ -1437,6 +1445,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     if (this.btnWechat) this.btnWechat.hidden = this.preset !== "story";
     if (this.storyTools) this.storyTools.hidden = this.preset !== "story";
     this._syncStoryThemeTools();
+    this._syncStoryTitle();
   };
 
   CardMaker.prototype.setStoryTheme = function (theme) {
@@ -1452,6 +1461,16 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var theme = card && card.getAttribute("data-theme") === "dark" ? "dark" : "light";
     this.btnStoryLight.classList.toggle("is-active", theme === "light");
     this.btnStoryDark.classList.toggle("is-active", theme === "dark");
+  };
+
+  CardMaker.prototype._syncStoryTitle = function () {
+    if (!this.storyTitleText) return;
+    this.storyTitleText.textContent = this.title || "未命名公众号文章";
+  };
+
+  CardMaker.prototype.copyStoryTitle = function () {
+    copyPlainText(this.title || "");
+    this._toast("已复制公众号标题");
   };
 
   // 切到某比例并载入其示例（示例独立存放在 examples/<preset>.html，按需 fetch 注入）
