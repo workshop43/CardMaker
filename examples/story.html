@@ -10,7 +10,9 @@
   <!-- 公众号图文示例：生成后点击「复制公众号 HTML」，粘贴到公众号编辑器。 -->
   <div data-cardmaker data-preset="story" data-title="公众号排版示例" data-font="hei">
     <style>
-      .wechat-demo .cm-main { gap: 18px; }
+      .wechat-demo .cm-main { display: block; }
+      .wechat-demo .cm-main > * { margin: 0; }
+      .wechat-demo .cm-main > * + * { margin-top: 18px; }
       .wechat-demo .mp-lead { font-size: 17px; line-height: 1.85; color: var(--cm-muted); margin: 0; }
       .wechat-demo .mp-section { padding: 16px; border: 1px solid var(--cm-line); border-radius: 12px; }
       .wechat-demo .mp-section h2 { font-size: 20px; line-height: 1.4; margin: 0 0 8px; color: var(--cm-fg); }
