@@ -32,11 +32,20 @@ function sceneLine(plan) {
 const TOKENS =
   "可选设计令牌：--cm-fg 文字 · --cm-bg/--cm-card-bg 背景 · --cm-accent 强调(其上文字 --cm-accent-fg) · --cm-muted 次要 · --cm-line 描边 · 字阶 --cm-h1/--cm-h2/--cm-h3/--cm-text · 间距 --cm-pad/--cm-gap。用不用、用多大随你。";
 
+const STORY_TOKENS =
+  "公众号正文可选设计令牌：--cm-fg 文字 · --cm-accent 强调(其上文字 --cm-accent-fg) · --cm-muted 次要 · --cm-line 描边 · --cm-surface/--cm-surface-strong 局部重点块底色 · 字阶 --cm-h1/--cm-h2/--cm-h3/--cm-text · 间距 --cm-pad/--cm-gap。不要用 --cm-bg/--cm-card-bg 给整篇文章上底色。";
+
 const COLOR_INTENT =
   "【配色原则】配色应根据内容要表达的主题、情绪、受众、场景和传播目的自行设计；不要套固定色板，不要默认单色主题，也不要为了统一而牺牲信息层级。";
 
 const STORY_AESTHETIC =
-  "【公众号高级审美原则】整体应像高质量杂志长文/精品专栏，而不是海报拼贴或廉价模板：建立清晰字阶、舒适行距、稳定段距和有呼吸感的留白；用少量但准确的强调色服务内容语气；引用、重点块、分隔线要克制、精致、轻量，不使用花哨图标、厚重大色块、过多圆角阴影、渐变堆叠、卡片堆砌、土味装饰或强行可爱化元素。";
+  "【公众号高级审美原则】整体应像高质量杂志长文/精品专栏，而不是海报拼贴、故事卡片列表或廉价模板：建立清晰字阶、舒适行距、稳定段距和有呼吸感的留白；用少量但准确的强调色服务内容语气；引用、重点块、分隔线要克制、精致、轻量，不使用花哨图标、厚重大色块、过多圆角阴影、渐变堆叠、卡片堆砌、编号圆牌堆叠、土味装饰或强行可爱化元素。";
+
+const STORY_DESIGN_METHOD =
+  "【公众号设计方法】先从文章内容里提炼视觉气质（例如冷静理性、温柔叙事、锋利观点、专业研究、人物纪实、商业洞察等），再决定配色、字阶、段距、引用块和分隔方式；色彩应有内容表达理由，强调色只服务信息层级和情绪，不做默认装饰。整体要像有编辑判断的文章设计，而不是套用固定公众号模板。";
+
+const STORY_ARTICLE_FLOW =
+  "【公众号文章流】排版必须像一篇可连续阅读的文章：以导语、自然段、小标题、段落组、少量引用/重点块组织内容；不要把每个故事/小节做成独立卡片，不要使用大号编号圆点、故事卡、步骤卡、海报式信息块连续堆叠。章节标题可以有轻量强调，但正文仍以段落阅读为主。";
 
 function canvasBlock(preset, P) {
   if (preset === "story") {
@@ -46,13 +55,16 @@ function canvasBlock(preset, P) {
       "- 公众号排版没有页眉、页脚、页码；不要输出 .cm-header、.cm-footer、.cm-page。",
       "- 主体内容放进 .cm-main；不要在 .cm-main 里输出文章主标题，直接从正文导语/段落/小标题开始。",
       "- 预览可以用 data-theme=\"light\" / \"dark\" 模拟公众号亮色/暗色阅读颜色；整篇文章外层和 .cm-main 不要加背景色。",
-      "- 正文组件可以使用背景、渐变和阴影，但必须兼容 light/dark：默认正文、次要文字、边框、普通组件底色、阴影可使用 --cm-fg / --cm-muted / --cm-line / --cm-surface / --cm-surface-strong / --cm-shadow 等变量自适应；具有明确设计含义的强调字色/装饰色可以使用具体色值，但要在亮色和暗色阅读背景上都清晰可读。",
+      "- 不要给承载整篇文章的 wrapper、.card、.cm-main 或覆盖大段正文的容器设置背景色/背景图；只有引用、重点提示、局部强调块可以有轻量底色。",
+      "- 正文组件可以使用局部背景、渐变和阴影，但必须兼容 light/dark：默认正文、次要文字、边框、普通组件底色、阴影可使用 --cm-fg / --cm-muted / --cm-line / --cm-surface / --cm-surface-strong / --cm-shadow 等变量自适应；具有明确设计含义的强调字色/装饰色可以使用具体色值，但要在亮色和暗色阅读背景上都清晰可读。",
       "- 公众号复制 HTML 主要依赖 inline style；不要用 ::before / ::after 承载关键图标、编号、分割线、装饰文字或列表符号，必须用真实 DOM 节点（span/div/section）表达。",
       "- 引用块不要用 <blockquote>，用 <section>/<div> + class 表达，并在共享样式里定义 background、padding、border-left、border-radius；导出时这些会内联到真实节点。",
       "- 设计倾向简约：少用复杂图标分割线、重阴影、大色块和密集装饰；优先用留白、字号、行距、细线、轻量强调色建立层级。",
       STORY_AESTHETIC,
+      STORY_DESIGN_METHOD,
+      STORY_ARTICLE_FLOW,
       "- 禁止 <html>/<head>/<body>、``` 围栏、解释文字、<script>、外链图片/字体/CSS。换字体用 data-font（" + FONTS + "）。",
-      TOKENS,
+      STORY_TOKENS,
     ].join("\n");
   }
   return [
@@ -92,6 +104,7 @@ function layoutBlock(preset) {
       "- 不要输出 .cm-header / .cm-footer / .cm-page；公众号文章没有卡片页眉、页脚和页码。",
       "- .cm-main 里从上到下组织：导语、章节、小标题、段落、引用、重点块、分隔等文章模块；不要放文章主标题。",
       "- 这是单篇长页面，不要拆页，也不要设计成全屏海报。",
+      "- 这是文章排版，不是卡片集：不要连续使用编号模块、故事卡、步骤卡、三段式卡片或每节一个大容器。",
       "- 列表和分隔模块要用真实元素排版，不要依赖 list-style 或伪元素；图标与文字同一行时用真实 span，并使用 display:inline-block、vertical-align:middle、line-height 和 text-align 控制，不要依赖 flex 居中。",
       "- 预览和复制 HTML 都按普通正文流计算段间距；不要用 .cm-main 的 gap 或过大的 margin 撑开章节，段落/章节间距写在具体正文模块上。",
     ].join("\n");
@@ -122,12 +135,14 @@ function componentPolicy(preset) {
       "【组件规范】",
       "- 公众号模式的共享组件只包含导语、正文段落、小标题、引用、重点块、分隔、列表、图片占位等正文组件。",
       "- 不要定义或使用 header/footer/page number 这类卡片 chrome。",
-      "- 整篇文章外层和 .cm-main 不使用背景色；重点块、引用、卡片等局部组件可以有背景、渐变、阴影。默认中性色可用 light/dark 兼容变量自适应；有明确设计意图的强调色可以写成具体色值，但必须在 light/dark 预览下都可读。",
+      "- 整篇文章外层、.card、.cm-main 和大段正文 wrapper 不使用背景色；重点块、引用等局部组件可以有轻量背景、渐变、阴影。默认中性色可用 light/dark 兼容变量自适应；有明确设计意图的强调色可以写成具体色值，但必须在 light/dark 预览下都可读。",
       "- 视觉系统集中在 deck 级 <style>，正文组件可通过语义 class 复用。",
       "- 不要使用 ::before / ::after 做关键视觉；公众号导出的关键分隔线、图标、序号、列表符号都必须是正文里的真实 DOM。",
       "- 引用块使用 section/div，不使用 blockquote；分割线图标用真实 span 且 inline-block + vertical-align:middle，不依赖 flex 居中。",
-      "- 整体设计克制，局部组件可以有轻量背景/渐变/阴影，但不要让文章看起来像多张卡片堆叠或海报拼贴。",
+      "- 整体设计克制，局部组件可以有轻量背景/渐变/阴影，但不要让文章看起来像多张卡片堆叠、故事卡片列表或海报拼贴。",
       "- 审美目标是高端、清爽、耐读、有内容气质；避免土味公众号模板感。",
+      STORY_DESIGN_METHOD,
+      STORY_ARTICLE_FLOW,
       "- 可以自行设计 DOM 结构和正文组件组合；最终要像一篇可复制到公众号编辑器的长文。",
     ].join("\n");
   }
@@ -414,8 +429,10 @@ export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML
     "可调整配色 / 强调色、字体、组件外观、整体风格、跨页组件规范——设计判断由你做主。",
     COLOR_INTENT,
     preset === "story" ? STORY_AESTHETIC : "",
+    preset === "story" ? STORY_DESIGN_METHOD : "",
+    preset === "story" ? STORY_ARTICLE_FLOW : "",
     preset === "story"
-      ? "可调整导语、段落、小标题、引用、重点块、分隔等正文组件的样式、间距、层级和密度一致性；不要引入 header/footer/page number；不要给整篇文章外层或 .cm-main 添加背景色；局部组件的背景、渐变、阴影必须兼容 light/dark；整体偏简约清爽，不要堆过多修饰。"
+      ? "可调整导语、段落、小标题、引用、重点块、分隔等正文组件的样式、间距、层级和密度一致性；不要引入 header/footer/page number；不要给整篇文章外层、.card、.cm-main 或大段正文 wrapper 添加背景色；局部组件的背景、渐变、阴影必须兼容 light/dark；整体偏简约清爽，不要堆过多修饰。"
       : "可调整 header/footer/title/subtitle/page number/内容块/section label 等跨页组件的样式、间距、层级和密度一致性。",
     preset === "story"
       ? "【保留 .cm-main 正文流结构】——只改视觉（配色/字体/线条/质感）和正文组件，不要新增 .cm-header / .cm-footer；不要用 ::before / ::after 做关键图标、分割线或列表符号，改用真实 DOM。"

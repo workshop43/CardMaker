@@ -305,7 +305,14 @@
 .cm-app[data-preset="story"] .cm-stage { align-items: flex-start; overflow: auto; padding: 24px 0; }
 .cm-app[data-preset="story"] .cm-scaler { transform-origin: top center; }
 .cm-app[data-preset="story"] .card { justify-content: flex-start; overflow: visible; }
-.cm-app[data-preset="story"] .cm-main { display: block; flex: none; min-height: 0; gap: 0; }
+.cm-app[data-preset="story"] .cm-main {
+  display: block;
+  flex: none;
+  min-height: 0;
+  gap: 0;
+  background: transparent !important;
+  background-image: none !important;
+}
 .cm-app[data-preset="story"] .cm-main > * { margin-top: 0; }
 .cm-app[data-preset="story"] .cm-nav { display: none; }
 .cm-app[data-preset="story"] .cm-header,
