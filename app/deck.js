@@ -283,6 +283,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       this.storyTitle.appendChild(this.btnStoryCopyTitle);
       this.btnWechat = el("button", "cm-btn cm-primary", "复制公众号 HTML");
       this.btnWechatBuffer = el("button", "cm-btn", "复制区");
+      this.btnWechatBuffer.hidden = true;
       this.storyTools.appendChild(this.storyTitle);
       this.storyTools.appendChild(this.storyThemeToggle);
       this.storyTools.appendChild(this.btnWechat);
@@ -500,16 +501,16 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   CardMaker.prototype.copyWeChatHTML = function () {
     var html = this.getWeChatHTML();
     var self = this;
-    if (!html) { this._toast("没有可复制的内容"); return; }
+    if (!html) { flashButton(this.btnWechat, "无内容"); return; }
     if (copyHTMLWithCopyEvent(html) || copyRichHTMLFromDOM(html)) {
-      this._toast("已复制公众号富文本");
+      flashButton(this.btnWechat, "已复制");
       return;
     }
     copyClipboardHTML(html).then(function (ok) {
-      if (ok) self._toast("已复制公众号 HTML");
+      if (ok) flashButton(self.btnWechat, "已复制");
       else {
         copyPlainText(html);
-        self._toast("已复制 HTML 源码");
+        flashButton(self.btnWechat, "已复制源码");
       }
     });
   };
@@ -727,6 +728,18 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     ta.select();
     try { document.execCommand("copy"); } catch (e) { /* ignore */ }
     ta.remove();
+  }
+
+  function flashButton(button, text) {
+    if (!button) return;
+    var original = button.textContent;
+    button.textContent = text;
+    button.disabled = true;
+    clearTimeout(button.__cmFlashTimer);
+    button.__cmFlashTimer = setTimeout(function () {
+      button.textContent = original;
+      button.disabled = false;
+    }, 1400);
   }
 
   function copyHTMLWithCopyEvent(html) {
@@ -1470,7 +1483,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
 
   CardMaker.prototype.copyStoryTitle = function () {
     copyPlainText(this.title || "");
-    this._toast("已复制公众号标题");
+    flashButton(this.btnStoryCopyTitle, "已复制");
   };
 
   // 切到某比例并载入其示例（示例独立存放在 examples/<preset>.html，按需 fetch 注入）
