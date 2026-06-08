@@ -245,6 +245,9 @@
 .cm-app[data-preset="story"] .cm-scaler { transform-origin: top center; }
 .cm-app[data-preset="story"] .card { justify-content: flex-start; overflow: visible; }
 .cm-app[data-preset="story"] .cm-nav { display: none; }
+.cm-app[data-preset="story"] .cm-header,
+.cm-app[data-preset="story"] .cm-footer,
+.cm-app[data-preset="story"] .cm-page { display: none !important; }
 
 /* ---------- 5. 卡片基础排版（让最简单的 HTML 也好看） ---------- */
 .card {

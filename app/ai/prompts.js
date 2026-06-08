@@ -8,7 +8,7 @@
      （字号/排版/配色交回模型）。不写「你是世界顶尖…」这类角色扮演。
    ② 内容在 plan 阶段定稿（完整文案），render 只排版、不再编内容。
    ③ 样式在 design 阶段连同一张样板页一起产出，先确认再铺开全套。
-   ④ 版面用常规流（.cm-header / .cm-main / .cm-footer），不靠绝对定位 chrome。
+   ④ 普通卡片用常规流（.cm-header / .cm-main / .cm-footer），公众号长文只用正文流。
    ============================================================= */
 
 const THEMES = "light dark warm ink mint gradient ocean sky sunset forest paper bold pastel tech cream night";
@@ -34,6 +34,17 @@ const TOKENS =
   "可选设计令牌：--cm-fg 文字 · --cm-bg/--cm-card-bg 背景 · --cm-accent 强调(其上文字 --cm-accent-fg) · --cm-muted 次要 · --cm-line 描边 · 字阶 --cm-h1/--cm-h2/--cm-h3/--cm-text · 间距 --cm-pad/--cm-gap。用不用、用多大随你。";
 
 function canvasBlock(preset, P) {
+  if (preset === "story") {
+    return [
+      "【硬约束】",
+      "- 一个 <section class=\"card\"> 承载整篇微信公众号长文，基准宽度 " + P.w + "px，最小预览高度 " + P.h + "px；页面不分页，允许纵向变长滚动。",
+      "- 公众号排版没有页眉、页脚、页码；不要输出 .cm-header、.cm-footer、.cm-page。",
+      "- 主体内容放进 .cm-main；按微信公众号文章阅读体验组织标题、导语、小标题、段落、引用、重点块和分隔。",
+      "- 自定义背景务必同时设文字色（深底配浅字、浅底配深字），别只改背景不改 --cm-fg。",
+      "- 禁止 <html>/<head>/<body>、``` 围栏、解释文字、<script>、外链图片/字体/CSS。换字体用 data-font（" + FONTS + "）。",
+      TOKENS,
+    ].join("\n");
+  }
   return [
     "【硬约束】",
     "- 一个 <section class=\"card\"> 就是整页 " + P.w + "×" + P.h + "px，按真实像素设计；布局自由。内容超出 " + P.h + "px 会被裁切。",
@@ -63,6 +74,19 @@ const LAYOUT = [
   "- 别用 position:absolute 去钉页眉/页脚/标题（运行时已处理）；页码就是页脚右侧 <span>，不另做。页码必须使用当前任务给你的真实页码，不要沿用任何示例数字。",
 ].join("\n");
 
+function layoutBlock(preset) {
+  if (preset === "story") {
+    return [
+      "【版面结构 · 微信公众号长文】",
+      "只输出一个 <section class=\"card\">，内部使用 <div class=\"cm-main\">…</div> 承载整篇文章正文。",
+      "- 不要输出 .cm-header / .cm-footer / .cm-page；公众号文章没有卡片页眉、页脚和页码。",
+      "- .cm-main 里从上到下组织：标题、导语、章节、小标题、段落、引用、重点块、分隔等文章模块。",
+      "- 这是单篇长页面，不要拆页，也不要设计成全屏海报。",
+    ].join("\n");
+  }
+  return LAYOUT;
+}
+
 const STYLE_POLICY = [
   "【风格边界】",
   "- 全套视觉风格必须集中在 deck 级 <style>：颜色、字体、阴影、背景、边框、圆角、装饰、组件质感都由全局样式控制。",
@@ -80,12 +104,36 @@ const COMPONENT_POLICY = [
   "- 页面之间可以换内容版式，但不能换 UI 系统；同类角色页面的 title/subtitle/header/footer 必须有稳定位置、稳定层级、稳定样式。",
 ].join("\n");
 
+function componentPolicy(preset) {
+  if (preset === "story") {
+    return [
+      "【组件规范】",
+      "- 公众号模式的共享组件只包含文章标题、导语、正文段落、小标题、引用、重点块、分隔、列表、图片占位等正文组件。",
+      "- 不要定义或使用 header/footer/page number 这类卡片 chrome。",
+      "- 视觉系统集中在 deck 级 <style>，正文组件可通过语义 class 复用。",
+      "- 可以自行设计 DOM 结构和正文组件组合；最终要像一篇可复制到公众号编辑器的长文。",
+    ].join("\n");
+  }
+  return COMPONENT_POLICY;
+}
+
 const ROLE_LAYOUT_POLICY = [
   "【页面角色与布局】",
   "- cover/ending/quote 可以使用 cm-middle 和封面式大标题。",
   "- content/data 是正文页，通常由标题、副标题、正文块组成，放在 .cm-main 常规流里。",
   "- 页面内容必须在固定画布内完整呈现。",
 ].join("\n");
+
+function roleLayoutPolicy(preset) {
+  if (preset === "story") {
+    return [
+      "【页面角色与布局】",
+      "- 微信公众号模式只有一篇长文页面，role 通常用 content。",
+      "- 不需要 cover/ending/quote 的分页角色结构；标题、引言、结尾都作为文章正文模块放在同一个 .cm-main 内。",
+    ].join("\n");
+  }
+  return ROLE_LAYOUT_POLICY;
+}
 
 const OVERFLOW_POLICY = [
   "【输出前版面自检】",
@@ -189,13 +237,15 @@ export function designPrompt(preset, P, plan, samplePage, samplePageNum, total, 
     "建议 data-theme=" + (plan.theme || "") + "、data-font=" + (plan.font || "") + "（可进一步定制）。配色、字号字阶、版式、间距、装饰——设计判断由你做主。",
     "你必须在 <style> 中定义足够复用的页面组件和 role 变体，让 cover/content/data/quote/ending 都能用同一套视觉语言排版；不要把关键视觉写进样板页的 style 属性。",
     "",
-    LAYOUT,
+    layoutBlock(preset),
     STYLE_POLICY,
-    COMPONENT_POLICY,
-    ROLE_LAYOUT_POLICY,
+    componentPolicy(preset),
+    roleLayoutPolicy(preset),
     OVERFLOW_POLICY,
     pageNumberLine(samplePageNum, total),
-    "⚠ 不要重定义 .card / .cm-main / .cm-header / .cm-footer 的 position 或 .card 的 width/height/margin/overflow——版面结构与画布尺寸由运行时负责，你只管配色、字体、字号、间距、装饰这些视觉。",
+    preset === "story"
+      ? "⚠ 不要重定义 .card / .cm-main 的 position 或 .card 的 width/height/margin/overflow；不要输出 .cm-header / .cm-footer / .cm-page。"
+      : "⚠ 不要重定义 .card / .cm-main / .cm-header / .cm-footer 的 position 或 .card 的 width/height/margin/overflow——版面结构与画布尺寸由运行时负责，你只管配色、字体、字号、间距、装饰这些视觉。",
     "",
     canvasBlock(preset, P),
     contextBlock(context),
@@ -220,10 +270,10 @@ export function renderPrompt(preset, P, plan, designStyle, pageSpec, prevHTML, p
     sceneLine(plan),
     "data-role 必须是 \"" + role + "\"。与上一页视觉承接、风格统一。",
     "",
-    LAYOUT,
+    layoutBlock(preset),
     STYLE_POLICY,
-    COMPONENT_POLICY,
-    ROLE_LAYOUT_POLICY,
+    componentPolicy(preset),
+    roleLayoutPolicy(preset),
     OVERFLOW_POLICY,
     pageNumberLine(pageNum, total),
     "可以复用全局设计系统的 class/令牌，也可以自行组织正文 DOM 和语义 class；新增页面必须看起来像同一套 deck 的自然延续。",
@@ -251,13 +301,15 @@ export function editPrompt(preset, P, designStyle, currentHTML, feedback, pageNu
   const sys = [
     "【模式：单页修改】修改一套卡片 deck 里的【第 " + pageNum + " / " + total + " 页】——只能改这一页。",
     "返回当前页修改后的完整 <section>。",
-    "可以重组本页 .cm-main 内的 DOM 结构、正文组件组合和信息层级；跨页 header/footer/page number 仍复用当前视觉系统。",
+    preset === "story"
+      ? "可以重组 .cm-main 内的文章正文结构、正文组件组合和信息层级；不要添加 header/footer/page number。"
+      : "可以重组本页 .cm-main 内的 DOM 结构、正文组件组合和信息层级；跨页 header/footer/page number 仍复用当前视觉系统。",
     "不要输出其他页面、整套大纲、解释文字或代码围栏。",
     "",
     mediumBlock(preset, P),
     canvasBlock(preset, P),
     STYLE_POLICY,
-    COMPONENT_POLICY,
+    componentPolicy(preset),
     OVERFLOW_POLICY,
     pageNumberLine(pageNum, total),
     contextBlock(context),
@@ -343,8 +395,12 @@ export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML
     "修改一套卡片 deck 的【全局设计系统 <style>】——它定义整套的配色、字体、全局组件和工具类，每页都复用。改它，所有页一起变。",
     "可按用户意见精确修改已有 selector/class 规则，也可补充新的 class 规则；保留不相关规则和当前视觉系统。",
     "可调整配色 / 强调色、字体、组件外观、整体风格、跨页组件规范——设计判断由你做主。",
-    "可调整 header/footer/title/subtitle/page number/内容块/section label 等跨页组件的样式、间距、层级和密度一致性。",
-    "【保留 .cm-header / .cm-main / .cm-footer 的常规流结构，别给它们加 position:absolute】——只改视觉（配色/字体/线条/质感），别动版面结构，否则各页会对不齐。",
+    preset === "story"
+      ? "可调整文章标题、导语、段落、小标题、引用、重点块、分隔等正文组件的样式、间距、层级和密度一致性；不要引入 header/footer/page number。"
+      : "可调整 header/footer/title/subtitle/page number/内容块/section label 等跨页组件的样式、间距、层级和密度一致性。",
+    preset === "story"
+      ? "【保留 .cm-main 正文流结构】——只改视觉（配色/字体/线条/质感）和正文组件，不要新增 .cm-header / .cm-footer。"
+      : "【保留 .cm-header / .cm-main / .cm-footer 的常规流结构，别给它们加 position:absolute】——只改视觉（配色/字体/线条/质感），别动版面结构，否则各页会对不齐。",
     "不要输出 <section>，不要把 class 级样式分散写进每页 section 的 style 属性。",
     "若换中文字体：在 <style> 之前单独输出一行 <!--FONT key-->（key 从 " + FONTS + " 里选）。",
     "若整套需要切换内置主题 key：在 <style> 之前单独输出一行 <!--THEME key-->（key 从 " + THEMES + " 里选）。这会由执行层统一写到所有页面的 data-theme。",
@@ -352,7 +408,7 @@ export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML
     mediumBlock(preset, P),
     canvasBlock(preset, P),
     STYLE_POLICY,
-    COMPONENT_POLICY,
+    componentPolicy(preset),
     OVERFLOW_POLICY,
     TOKENS,
     contextBlock(context),
