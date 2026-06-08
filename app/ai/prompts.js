@@ -32,6 +32,9 @@ function sceneLine(plan) {
 const TOKENS =
   "可选设计令牌：--cm-fg 文字 · --cm-bg/--cm-card-bg 背景 · --cm-accent 强调(其上文字 --cm-accent-fg) · --cm-muted 次要 · --cm-line 描边 · 字阶 --cm-h1/--cm-h2/--cm-h3/--cm-text · 间距 --cm-pad/--cm-gap。用不用、用多大随你。";
 
+const COLOR_INTENT =
+  "【配色原则】配色应根据内容要表达的主题、情绪、受众、场景和传播目的自行设计；不要套固定色板，不要默认单色主题，也不要为了统一而牺牲信息层级。";
+
 function canvasBlock(preset, P) {
   if (preset === "story") {
     return [
@@ -235,6 +238,7 @@ export function designPrompt(preset, P, plan, samplePage, samplePageNum, total, 
     mediumBlock(preset, P),
     sceneLine(plan),
     "风格方向：" + (plan.theme || "由你根据场景自行决定") + "。建议 data-font=" + (plan.font || "") + "（可进一步定制）。配色组合、字号字阶、版式、间距、装饰——设计判断由你做主，不受内置主题限制。",
+    COLOR_INTENT,
     "你必须在 <style> 中定义足够复用的页面组件和 role 变体，让 cover/content/data/quote/ending 都能用同一套视觉语言排版；不要把关键视觉写进样板页的 style 属性。",
     "",
     layoutBlock(preset),
@@ -395,6 +399,7 @@ export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML
     "修改一套卡片 deck 的【全局设计系统 <style>】——它定义整套的配色、字体、全局组件和工具类，每页都复用。改它，所有页一起变。",
     "可按用户意见精确修改已有 selector/class 规则，也可补充新的 class 规则；保留不相关规则和当前视觉系统。",
     "可调整配色 / 强调色、字体、组件外观、整体风格、跨页组件规范——设计判断由你做主。",
+    COLOR_INTENT,
     preset === "story"
       ? "可调整导语、段落、小标题、引用、重点块、分隔等正文组件的样式、间距、层级和密度一致性；不要引入 header/footer/page number；不要给整篇文章外层或 .cm-main 添加背景色；局部组件的背景、渐变、阴影必须兼容 light/dark。"
       : "可调整 header/footer/title/subtitle/page number/内容块/section label 等跨页组件的样式、间距、层级和密度一致性。",
