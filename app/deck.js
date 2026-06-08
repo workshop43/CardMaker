@@ -20,7 +20,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     xiaohongshu: { w: 1080, h: 1440, label: "小红书 3:4" },
     square: { w: 1080, h: 1080, label: "方形 1:1" },
     ppt: { w: 1280, h: 720, label: "PPT 16:9" },
-    story: { w: 1080, h: 1920, label: "竖屏 9:16" },
+    story: { w: 1080, h: 1920, label: "微信公众号排版" },
   };
   var BUILTIN_EXAMPLE_TITLES = {
     "3个写作习惯": true,
@@ -203,6 +203,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.cards = [];
     this._build();
     if (!this.view && !this.isBuiltinExample) this._restore(); // 浏览模式和内置示例都用文件里的内容，不恢复本地存档
+    this._updatePresetTools();
     this.refresh();
     if (this.pendingExamplePreset) this.loadExample(this.pendingExamplePreset);
 
@@ -239,6 +240,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.btnPresent = el("button", "cm-btn", "放映");
     this.btnImport = el("button", "cm-btn", "导入 HTML");
     this.btnSave = el("button", "cm-btn", "导出 HTML");
+    this.btnWechat = el("button", "cm-btn", "复制公众号 HTML");
     this.btnExport = el("button", "cm-btn", "当前页导出 PNG");
     this.btnExportAll = el("button", "cm-btn cm-primary", "打包导出 PNG");
     this.fileImport = el("input");
@@ -251,6 +253,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       bar.appendChild(this.btnImport);
       bar.appendChild(this.fileImport);
       bar.appendChild(this.btnSave);
+      bar.appendChild(this.btnWechat);
       bar.appendChild(this.btnExport);
       bar.appendChild(this.btnExportAll);
     }
@@ -308,7 +311,9 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.btnImport.onclick = function () { self.fileImport.click(); };
     this.fileImport.onchange = function () { self._handleImportFile(self.fileImport.files && self.fileImport.files[0]); };
     this.btnSave.onclick = function () { self.downloadHTML(); };
+    this.btnWechat.onclick = function () { self.copyWeChatHTML(); };
     this.textarea.addEventListener("input", function () { self._applyEditor(); });
+    this._updatePresetTools();
   };
 
   // 把每个 deck 级 <style> 限定到 .cm-cards 作用域，杜绝其全局选择器污染平台 UI；
@@ -468,10 +473,148 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     return true;
   };
 
+  // 复制公众号可识别的 HTML：去掉运行时 class / script / 外链 CSS，把当前 deck 的可见内容转成内联样式。
+  CardMaker.prototype.copyWeChatHTML = function () {
+    var html = this.getWeChatHTML();
+    var self = this;
+    if (!html) { this._toast("没有可复制的内容"); return; }
+    if (navigator.clipboard && window.ClipboardItem) {
+      var item = new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([html], { type: "text/plain" }),
+      });
+      navigator.clipboard.write([item]).then(function () {
+        self._toast("已复制公众号 HTML");
+      }).catch(function () {
+        copyPlainText(html);
+        self._toast("已复制 HTML 源码");
+      });
+      return;
+    }
+    copyPlainText(html);
+    this._toast("已复制 HTML 源码");
+  };
+
+  // 输出适合粘贴到微信公众号编辑器的 HTML 片段。
+  CardMaker.prototype.getWeChatHTML = function () {
+    if (!this.cards || !this.cards.length) return "";
+    var parts = [];
+    this.cards.forEach(function (card, i) {
+      var main = card.querySelector(".cm-main") || card;
+      var wrap = document.createElement("section");
+      wrap.setAttribute("style", [
+        "box-sizing:border-box",
+        "margin:" + (i ? "22px 0 0" : "0"),
+        "padding:22px 18px",
+        "border-radius:14px",
+        "background:" + safeColor(getComputedStyle(card).backgroundColor, "#ffffff"),
+        "color:" + safeColor(getComputedStyle(card).color, "#1f2937"),
+        "font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',Arial,sans-serif",
+      ].join(";") + ";");
+      Array.prototype.forEach.call(main.childNodes, function (node) {
+        if (isRuntimeChrome(node)) return;
+        var cloned = cloneWechatNode(node);
+        if (cloned) wrap.appendChild(cloned);
+      });
+      parts.push(wrap.outerHTML);
+    });
+    return '<section style="box-sizing:border-box;max-width:677px;margin:0 auto;padding:0;color:#1f2937;font-size:16px;line-height:1.8;">' +
+      parts.join("\n") + "</section>";
+  };
+
   // 判断用户上传的是 Markdown 文件；MIME 在不同系统里不稳定，因此以扩展名为主。
   function isMarkdownFile(file) {
     var name = (file && file.name) || "";
     return /\.(md|markdown)$/i.test(name) || /markdown/i.test((file && file.type) || "");
+  }
+
+  function isRuntimeChrome(node) {
+    return node && node.nodeType === 1 && node.matches(".cm-header,.cm-footer,.cm-page,script,style,link");
+  }
+
+  function cloneWechatNode(node) {
+    if (!node) return null;
+    if (node.nodeType === 3) return document.createTextNode(node.textContent || "");
+    if (node.nodeType !== 1 || isRuntimeChrome(node)) return null;
+    var tag = wechatTag(node);
+    var out = document.createElement(tag);
+    var style = wechatStyle(node, tag);
+    if (style) out.setAttribute("style", style);
+    if (node.tagName === "A" && node.getAttribute("href")) out.setAttribute("href", node.getAttribute("href"));
+    if (node.tagName === "IMG" && node.getAttribute("src")) out.setAttribute("src", node.getAttribute("src"));
+    Array.prototype.forEach.call(node.childNodes, function (child) {
+      var cloned = cloneWechatNode(child);
+      if (cloned) out.appendChild(cloned);
+    });
+    return out;
+  }
+
+  function wechatTag(node) {
+    var tag = (node.tagName || "div").toLowerCase();
+    return /^(section|div|p|span|strong|em|b|i|u|h1|h2|h3|h4|blockquote|ul|ol|li|a|img|br)$/i.test(tag) ? tag : "section";
+  }
+
+  function wechatStyle(node, tag) {
+    var cs = getComputedStyle(node);
+    var font = px(cs.fontSize);
+    var line = px(cs.lineHeight);
+    var styles = [
+      "box-sizing:border-box",
+      "max-width:100%",
+      "color:" + safeColor(cs.color, "#1f2937"),
+      "font-size:" + roundPx(clamp(font * 0.52, tag === "h1" ? 24 : 13, tag === "h1" ? 30 : tag === "h2" ? 26 : 18)) + "px",
+      "line-height:" + roundPx(clamp(line && font ? line / font : 1.75, 1.35, 2)),
+      "font-weight:" + cs.fontWeight,
+      "text-align:" + cs.textAlign,
+    ];
+    var bg = safeColor(cs.backgroundColor, "");
+    if (bg && bg !== "rgba(0, 0, 0, 0)") styles.push("background-color:" + bg);
+    ["marginTop", "marginRight", "marginBottom", "marginLeft", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"].forEach(function (prop) {
+      var value = px(cs[prop]);
+      if (value) styles.push(cssName(prop) + ":" + roundPx(value * 0.45) + "px");
+    });
+    if (cs.borderStyle !== "none" && px(cs.borderWidth)) {
+      styles.push("border:" + roundPx(px(cs.borderWidth) * 0.45) + "px " + cs.borderStyle + " " + safeColor(cs.borderColor, "#e5e7eb"));
+    }
+    if (px(cs.borderLeftWidth) >= 3 && cs.borderLeftStyle !== "none") {
+      styles.push("border-left:" + roundPx(px(cs.borderLeftWidth) * 0.45) + "px " + cs.borderLeftStyle + " " + safeColor(cs.borderLeftColor, "#4f46e5"));
+    }
+    var radius = px(cs.borderRadius);
+    if (radius) styles.push("border-radius:" + roundPx(radius * 0.45) + "px");
+    if (tag === "img") styles.push("display:block;width:100%;height:auto");
+    return styles.join(";") + ";";
+  }
+
+  function copyPlainText(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) { /* ignore */ }
+    ta.remove();
+  }
+
+  function cssName(prop) {
+    return prop.replace(/[A-Z]/g, function (m) { return "-" + m.toLowerCase(); });
+  }
+
+  function safeColor(value, fallback) {
+    return value && value !== "transparent" && !/rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/i.test(value) ? value : fallback;
+  }
+
+  function px(value) {
+    var n = parseFloat(value);
+    return isFinite(n) ? n : 0;
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value || min));
+  }
+
+  function roundPx(value) {
+    return Math.round(value * 10) / 10;
   }
 
   // 保存为自包含 HTML 文件：同源的 cardmaker.css/js 内联进去，双击即可打开、再编辑、再出图
@@ -977,7 +1120,12 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.app.setAttribute("data-preset", preset);
     var sel = this.app.querySelector(".cm-preset");
     if (sel) sel.value = preset;
+    this._updatePresetTools();
     this._fit();
+  };
+
+  CardMaker.prototype._updatePresetTools = function () {
+    if (this.btnWechat) this.btnWechat.hidden = this.preset !== "story";
   };
 
   // 切到某比例并载入其示例（示例独立存放在 examples/<preset>.html，按需 fetch 注入）

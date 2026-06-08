@@ -3,47 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>我们在找你（竖屏示例）</title>
+  <title>公众号排版示例</title>
   <link rel="stylesheet" href="../cardmaker.css" />
 </head>
 <body>
-  <!-- 竖屏 9:16 示例：招聘海报。整套同一主题 gradient，全局得意黑标题字。 -->
-  <div data-cardmaker data-preset="story" data-title="我们在找你" data-font="smiley">
+  <!-- 公众号图文示例：生成后点击「复制公众号 HTML」，粘贴到公众号编辑器。 -->
+  <div data-cardmaker data-preset="story" data-title="公众号排版示例" data-font="hei">
+    <style>
+      .wechat-demo .cm-header { border: 0; color: #7b8794; font-size: 22px; }
+      .wechat-demo .cm-main { gap: 30px; }
+      .wechat-demo .mp-title { font-size: 62px; line-height: 1.22; font-weight: 800; color: #18212f; margin: 0; }
+      .wechat-demo .mp-lead { font-size: 30px; line-height: 1.85; color: #5f6f86; margin: 0; }
+      .wechat-demo .mp-section { padding: 30px; border: 2px solid rgba(37, 99, 235, .14); border-radius: 24px; background: #f8fbff; }
+      .wechat-demo .mp-section h2 { font-size: 42px; line-height: 1.35; margin: 0 0 14px; color: #1f2a44; }
+      .wechat-demo .mp-section p { font-size: 29px; line-height: 1.85; color: #455468; margin: 0; }
+      .wechat-demo .mp-quote { border-left: 8px solid #4f46e5; padding: 18px 0 18px 24px; color: #334155; background: #f6f7ff; }
+    </style>
 
-    <!-- 封面：大标题 + 标签 -->
-    <section class="card cm-middle" data-theme="gradient" data-font="smiley">
-      <div class="cm-kicker">招聘海报</div>
-      <h1 class="cm-display">我们<br>在找你</h1>
-      <p class="cm-lead cm-mt">前端工程师 · 远程优先 · 弹性工作。</p>
-      <div class="cm-mt-lg"><span class="cm-tag">GitHub → https://github.com/workshop43/CardMaker</span></div>
-      <div class="cm-footer"><span>@CardMaker</span><span>扫码了解 ↓</span></div>
+    <section class="card wechat-demo" data-theme="light" data-role="cover">
+      <div class="cm-header"><span>公众号图文</span><span>可复制 HTML</span></div>
+      <div class="cm-main">
+        <div class="cm-kicker">WECHAT ARTICLE</div>
+        <h1 class="mp-title">一篇适合公众号阅读的图文排版</h1>
+        <p class="mp-lead">用清晰的层级、舒服的段落和重点模块，把内容整理成公众号编辑器可识别的 HTML。</p>
+        <div class="mp-quote">生成完成后点击「复制公众号 HTML」，粘贴到公众号后台即可保留基础格式。</div>
+      </div>
+      <div class="cm-footer"><span>CardMaker</span><span>01 / 02</span></div>
     </section>
 
-    <!-- 信息页：岗位亮点 -->
-    <section class="card" data-theme="gradient" data-font="smiley">
-      <div class="cm-header"><span>JOIN US</span><span>Frontend Engineer</span></div>
+    <section class="card wechat-demo" data-theme="light" data-role="content">
+      <div class="cm-header"><span>排版结构</span><span>Article Blocks</span></div>
       <div class="cm-main">
-        <div class="cm-kicker">你将拥有</div>
-        <h2>把产品做给真实用户</h2>
-        <p class="cm-lead">我们需要能把复杂交互做得清楚、稳定、好用的人。</p>
-        <div class="cm-col cm-mt" style="gap: 22px;">
-          <div class="cm-cell">
-            <h3>有意思的活</h3>
-            <p>从编辑器、导出链路到 AI 工作流，参与核心体验设计。</p>
-          </div>
-          <div class="cm-cell">
-            <h3>说人话的团队</h3>
-            <p>少开会，重交付，讨论问题直接看 demo 和数据。</p>
-          </div>
-          <div class="cm-cell">
-            <h3>能成长的环境</h3>
-            <p>学习预算、设备预算和充分的技术 ownership。</p>
-          </div>
+        <div class="mp-section">
+          <h2>1. 标题要短，导语要清楚</h2>
+          <p>公众号读者先扫结构，再决定是否继续读。主标题、导语和小标题要承担导航作用。</p>
+        </div>
+        <div class="mp-section">
+          <h2>2. 重点内容做成模块</h2>
+          <p>用浅底色、引用、重点卡片承载结论，避免一整屏都是等权重段落。</p>
+        </div>
+        <div class="mp-section">
+          <h2>3. 复制 HTML 后再微调</h2>
+          <p>粘贴到公众号后台后，可以继续在编辑器里调整局部文字和图片。</p>
         </div>
       </div>
-      <div class="cm-footer"><span>https://github.com/workshop43/CardMaker</span><span>← 滑动 →</span></div>
+      <div class="cm-footer"><span>CardMaker</span><span>02 / 02</span></div>
     </section>
-
   </div>
   <script type="module" src="../app/main.js"></script>
 </body>
