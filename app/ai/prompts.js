@@ -8,17 +8,13 @@
      （字号/排版/配色交回模型）。不写「你是世界顶尖…」这类角色扮演。
    ② 内容在 plan 阶段定稿（完整文案），render 只排版、不再编内容。
    ③ 样式在 design 阶段连同一张样板页一起产出，先确认再铺开全套。
-   ④ 普通卡片用常规流（.cm-header / .cm-main / .cm-footer），公众号长文只用正文流。
+   ④ 卡片用常规流（.cm-header / .cm-main / .cm-footer）。
    ============================================================= */
 
 const FONTS = "hei(现代黑) song(编辑宋) kai(文学楷) smiley(潮流标题) xiaowei(文艺宋) kuaile(活泼) mao(毛笔书法)";
 
 // 任务规格：这是一张要导出成图片的固定尺寸版面（不是网页）。只说「是什么」，不指导「怎么设计」。
 function mediumBlock(preset, P) {
-  if (preset === "story") {
-    return "这是一套【微信公众号图文排版】：" + P.label + "，预览画布 " + P.w + "×" + P.h +
-      "px。最终会复制为微信公众号编辑器可识别的 HTML 片段；预览区模拟公众号正文编辑区，标题属于公众号后台单独字段，不放进正文预览。内容应像一篇可连续阅读的公众号文章正文：导语、小标题、段落、重点卡片/引用/分隔，而不是全屏海报。整体排版偏简约、清爽、可读，避免过多修饰和大面积背景色；视觉、排版、字号、配色由你根据内容决定。";
-  }
   const seen = preset === "ppt" ? "在投影 / 大屏上看" : "发社交平台、在手机上看（会被缩小）";
   return "这是一张【要导出成图片】的固定尺寸版面：" + P.label + "，精确 " + P.w + "×" + P.h +
     "px，" + seen + "——是一张图，不是网页。视觉、排版、字号、配色完全由你做主。";
@@ -32,41 +28,10 @@ function sceneLine(plan) {
 const TOKENS =
   "可选设计令牌：--cm-fg 文字 · --cm-bg/--cm-card-bg 背景 · --cm-accent 强调(其上文字 --cm-accent-fg) · --cm-muted 次要 · --cm-line 描边 · 字阶 --cm-h1/--cm-h2/--cm-h3/--cm-text · 间距 --cm-pad/--cm-gap。用不用、用多大随你。";
 
-const STORY_TOKENS =
-  "公众号正文可选设计令牌：--cm-fg 文字 · --cm-accent 强调(其上文字 --cm-accent-fg) · --cm-muted 次要 · --cm-line 描边 · --cm-surface/--cm-surface-strong 局部重点块底色 · 字阶 --cm-h1/--cm-h2/--cm-h3/--cm-text · 间距 --cm-pad/--cm-gap。不要用 --cm-bg/--cm-card-bg 给整篇文章上底色。";
-
 const COLOR_INTENT =
   "【配色原则】配色应根据内容要表达的主题、情绪、受众、场景和传播目的自行设计；不要套固定色板，不要默认单色主题，也不要为了统一而牺牲信息层级。";
 
-const STORY_AESTHETIC =
-  "【公众号高级审美原则】整体应像高质量杂志长文/精品专栏，而不是海报拼贴、故事卡片列表或廉价模板：建立清晰字阶、舒适行距、稳定段距和有呼吸感的留白；用少量但准确的强调色服务内容语气；引用、重点块、分隔线要克制、精致、轻量，不使用花哨图标、厚重大色块、过多圆角阴影、渐变堆叠、卡片堆砌、编号圆牌堆叠、土味装饰或强行可爱化元素。";
-
-const STORY_DESIGN_METHOD =
-  "【公众号设计方法】先从文章内容里提炼视觉气质（例如冷静理性、温柔叙事、锋利观点、专业研究、人物纪实、商业洞察等），再决定配色、字阶、段距、引用块和分隔方式；色彩应有内容表达理由，强调色只服务信息层级和情绪，不做默认装饰。整体要像有编辑判断的文章设计，而不是套用固定公众号模板。";
-
-const STORY_ARTICLE_FLOW =
-  "【公众号文章流】排版必须像一篇可连续阅读的文章：以导语、自然段、小标题、段落组、少量引用/重点块组织内容；不要把每个故事/小节做成独立卡片，不要使用大号编号圆点、故事卡、步骤卡、海报式信息块连续堆叠。章节标题可以有轻量强调，但正文仍以段落阅读为主。";
-
 function canvasBlock(preset, P) {
-  if (preset === "story") {
-    return [
-      "【硬约束】",
-      "- 一个 <section class=\"card\"> 承载整篇微信公众号长文，基准宽度 " + P.w + "px，最小预览高度 " + P.h + "px；页面不分页，允许纵向变长滚动。",
-      "- 公众号排版没有页眉、页脚、页码；不要输出 .cm-header、.cm-footer、.cm-page。",
-      "- 主体内容放进 .cm-main；不要在 .cm-main 里输出文章主标题，直接从正文导语/段落/小标题开始。",
-      "- 预览可以用 data-theme=\"light\" / \"dark\" 模拟公众号亮色/暗色阅读颜色；整篇文章外层和 .cm-main 不要加背景色。",
-      "- 不要给承载整篇文章的 wrapper、.card、.cm-main 或覆盖大段正文的容器设置背景色/背景图；只有引用、重点提示、局部强调块可以有轻量底色。",
-      "- 正文组件可以使用局部背景、渐变和阴影，但必须兼容 light/dark：默认正文、次要文字、边框、普通组件底色、阴影可使用 --cm-fg / --cm-muted / --cm-line / --cm-surface / --cm-surface-strong / --cm-shadow 等变量自适应；具有明确设计含义的强调字色/装饰色可以使用具体色值，但要在亮色和暗色阅读背景上都清晰可读。",
-      "- 公众号复制 HTML 主要依赖 inline style；不要用 ::before / ::after 承载关键图标、编号、分割线、装饰文字或列表符号，必须用真实 DOM 节点（span/div/section）表达。",
-      "- 引用块不要用 <blockquote>，用 <section>/<div> + class 表达，并在共享样式里定义 background、padding、border-left、border-radius；导出时这些会内联到真实节点。",
-      "- 设计倾向简约：少用复杂图标分割线、重阴影、大色块和密集装饰；优先用留白、字号、行距、细线、轻量强调色建立层级。",
-      STORY_AESTHETIC,
-      STORY_DESIGN_METHOD,
-      STORY_ARTICLE_FLOW,
-      "- 禁止 <html>/<head>/<body>、``` 围栏、解释文字、<script>、外链图片/字体/CSS。换字体用 data-font（" + FONTS + "）。",
-      STORY_TOKENS,
-    ].join("\n");
-  }
   return [
     "【硬约束】",
     "- 一个 <section class=\"card\"> 就是整页 " + P.w + "×" + P.h + "px，按真实像素设计；布局自由。内容超出 " + P.h + "px 会被裁切。",
@@ -97,18 +62,6 @@ const LAYOUT = [
 ].join("\n");
 
 function layoutBlock(preset) {
-  if (preset === "story") {
-    return [
-      "【版面结构 · 微信公众号长文】",
-      "只输出一个 <section class=\"card\">，内部使用 <div class=\"cm-main\">…</div> 承载整篇文章正文。",
-      "- 不要输出 .cm-header / .cm-footer / .cm-page；公众号文章没有卡片页眉、页脚和页码。",
-      "- .cm-main 里从上到下组织：导语、章节、小标题、段落、引用、重点块、分隔等文章模块；不要放文章主标题。",
-      "- 这是单篇长页面，不要拆页，也不要设计成全屏海报。",
-      "- 这是文章排版，不是卡片集：不要连续使用编号模块、故事卡、步骤卡、三段式卡片或每节一个大容器。",
-      "- 列表和分隔模块要用真实元素排版，不要依赖 list-style 或伪元素；图标与文字同一行时用真实 span，并使用 display:inline-block、vertical-align:middle、line-height 和 text-align 控制，不要依赖 flex 居中。",
-      "- 预览和复制 HTML 都按普通正文流计算段间距；不要用 .cm-main 的 gap 或过大的 margin 撑开章节，段落/章节间距写在具体正文模块上。",
-    ].join("\n");
-  }
   return LAYOUT;
 }
 
@@ -127,25 +80,11 @@ const COMPONENT_POLICY = [
   "- header/footer/page number/title/subtitle 这些跨页 chrome 保持同一套视觉系统。",
   "- 正文内容区可以重组 DOM 结构、组件组合和信息层级；页面之间可以使用不同正文版式。",
   "- 页面之间可以换内容版式，但不能换 UI 系统；同类角色页面的 title/subtitle/header/footer 必须有稳定位置、稳定层级、稳定样式。",
+  "- 用户可能点名修改的视觉对象必须是真实 DOM 节点，例如 icon、圆点、编号、分隔符、徽标；不要用 ::before、::after 或 list-style 承载这些关键对象。",
+  "- 清单优先使用 <li><span class=\"cm-list-icon\"></span><span class=\"cm-list-body\">…</span></li>，这样 icon 和文字都能被后续选择器命中并调整。",
 ].join("\n");
 
 function componentPolicy(preset) {
-  if (preset === "story") {
-    return [
-      "【组件规范】",
-      "- 公众号模式的共享组件只包含导语、正文段落、小标题、引用、重点块、分隔、列表、图片占位等正文组件。",
-      "- 不要定义或使用 header/footer/page number 这类卡片 chrome。",
-      "- 整篇文章外层、.card、.cm-main 和大段正文 wrapper 不使用背景色；重点块、引用等局部组件可以有轻量背景、渐变、阴影。默认中性色可用 light/dark 兼容变量自适应；有明确设计意图的强调色可以写成具体色值，但必须在 light/dark 预览下都可读。",
-      "- 视觉系统集中在 deck 级 <style>，正文组件可通过语义 class 复用。",
-      "- 不要使用 ::before / ::after 做关键视觉；公众号导出的关键分隔线、图标、序号、列表符号都必须是正文里的真实 DOM。",
-      "- 引用块使用 section/div，不使用 blockquote；分割线图标用真实 span 且 inline-block + vertical-align:middle，不依赖 flex 居中。",
-      "- 整体设计克制，局部组件可以有轻量背景/渐变/阴影，但不要让文章看起来像多张卡片堆叠、故事卡片列表或海报拼贴。",
-      "- 审美目标是高端、清爽、耐读、有内容气质；避免土味公众号模板感。",
-      STORY_DESIGN_METHOD,
-      STORY_ARTICLE_FLOW,
-      "- 可以自行设计 DOM 结构和正文组件组合；最终要像一篇可复制到公众号编辑器的长文。",
-    ].join("\n");
-  }
   return COMPONENT_POLICY;
 }
 
@@ -157,13 +96,6 @@ const ROLE_LAYOUT_POLICY = [
 ].join("\n");
 
 function roleLayoutPolicy(preset) {
-  if (preset === "story") {
-    return [
-      "【页面角色与布局】",
-      "- 微信公众号模式只有一篇长文页面，role 通常用 content。",
-      "- 不需要 cover/ending/quote 的分页角色结构；page.title/subtitle 只作为元信息，不作为正文标题输出；引言、结尾作为文章正文模块放在同一个 .cm-main 内。",
-    ].join("\n");
-  }
   return ROLE_LAYOUT_POLICY;
 }
 
@@ -197,22 +129,15 @@ export function pageContentText(pg) {
 
 // ---------- 1) PLAN：内容定稿（每页完整文案 + 场景，输出 JSON） ----------
 export function planPrompt(preset, pages, topic, context) {
-  const isStory = preset === "story";
-  const pageLine = isStory
-    ? "页数：恰好 1 页（微信公众号排版是单篇长文，不分页；pages 数组长度必须是 1）。"
-    : pages
+  const pageLine = pages
     ? "页数：恰好 " + pages + " 页（pages 数组长度必须是 " + pages + "）。"
     : "页数：结合主题、受众、内容复杂度和输入约束自行决定。";
-  const storyLine = isStory
-    ? "微信公众号模式：pages[0] 承载整篇文章正文。title/subtitle 是元信息；正文从 content 的导语、章节、小标题、段落、引用/重点块开始，根据内容需要给 6~12 条 content，不要拆成多页。"
-    : "整套连续叙事：页与页有承接（总分/递进/起承转合）。每个内容页是能独立读懂的小章节。";
-  const contentLine = isStory
-    ? "公众号长文页的 content 要覆盖完整文章结构（每条 heading + 完整 text），文字写完整、能直接读，就是最终进入公众号的正文。"
-    : "封面/金句/结尾页 content 可留空或一两条；内容/数据页给 2~3 条 content（每条 heading + 完整 text）。所有文字写完整、能直接读，就是最终上卡的字。";
+  const narrativeLine = "整套连续叙事：页与页有承接（总分/递进/起承转合）。每个内容页是能独立读懂的小章节。";
+  const contentLine = "封面/金句/结尾页 content 可留空或一两条；内容/数据页给 2~3 条 content（每条 heading + 完整 text）。所有文字写完整、能直接读，就是最终上卡的字。";
   const sys = [
     "把主题拆成一套卡片 deck，并写出每页的【完整文案】——是最终要印在卡片上的字，而不是粗略提纲。",
     "先定场景（scene）：这套是干什么用的、给谁看、什么调性，一两句话——后续设计据此定风格。",
-    storyLine,
+    narrativeLine,
     "",
     "【只输出一个 JSON，禁止任何解释文字、禁止 ``` 围栏】，结构：",
     '{"title":"整套标题","scene":"用途/受众/调性，一两句","theme":"自由风格描述，可空","font":"从字体选一个 key","pages":[' +
@@ -275,9 +200,7 @@ export function designPrompt(preset, P, plan, samplePage, samplePageNum, total, 
     roleLayoutPolicy(preset),
     OVERFLOW_POLICY,
     pageNumberLine(samplePageNum, total),
-    preset === "story"
-      ? "⚠ 不要重定义 .card / .cm-main 的 position 或 .card 的 width/height/margin/overflow；不要输出 .cm-header / .cm-footer / .cm-page。"
-      : "⚠ 不要重定义 .card / .cm-main / .cm-header / .cm-footer 的 position 或 .card 的 width/height/margin/overflow——版面结构与画布尺寸由运行时负责，你只管配色、字体、字号、间距、装饰这些视觉。",
+    "⚠ 不要重定义 .card / .cm-main / .cm-header / .cm-footer 的 position 或 .card 的 width/height/margin/overflow——版面结构与画布尺寸由运行时负责，你只管配色、字体、字号、间距、装饰这些视觉。",
     "",
     canvasBlock(preset, P),
     contextBlock(context),
@@ -333,9 +256,7 @@ export function editPrompt(preset, P, designStyle, currentHTML, feedback, pageNu
   const sys = [
     "【模式：单页修改】修改一套卡片 deck 里的【第 " + pageNum + " / " + total + " 页】——只能改这一页。",
     "返回当前页修改后的完整 <section>。",
-    preset === "story"
-      ? "可以重组 .cm-main 内的文章正文结构、正文组件组合和信息层级；不要添加 header/footer/page number；不要用 ::before / ::after 做关键图标、分割线或列表符号，改用真实 DOM；整体保持简约可读。"
-      : "可以重组本页 .cm-main 内的 DOM 结构、正文组件组合和信息层级；跨页 header/footer/page number 仍复用当前视觉系统。",
+    "可以重组本页 .cm-main 内的 DOM 结构、正文组件组合和信息层级；跨页 header/footer/page number 仍复用当前视觉系统。",
     "不要输出其他页面、整套大纲、解释文字或代码围栏。",
     "",
     mediumBlock(preset, P),
@@ -376,10 +297,52 @@ export function contentPatchPrompt(context, feedback) {
     "- replace_text 可 selector 为空，表示在目标页所有文本节点里替换；如果给 selector，只在该组件内替换。",
     "- set_html 只能使用安全片段，禁止 <script>、<style>、外链资源。",
     "- set_style 只用于具体元素实例的布局和文字排版尺寸，例如 font-size、line-height、gap、grid-template、width/height；不要用它处理 class 级样式或全局 style 修改。",
+    "- CSS 伪元素、list marker、::before、::after 不是真实 DOM，不能用 selector 直接选中。若要调整这类视觉元素，需要改它所属真实元素的布局，或把该视觉元素改造成真实 DOM 节点后再设置样式。",
+    "- 当某个视觉对象在当前页 HTML 中不存在时，不要只修改相邻文字的 padding/margin 假装完成；应选择能真实影响该视觉对象的 DOM 结构或元素实例。",
   ].join("\n");
   const user = [
     "当前 deck 上下文：\n" + JSON.stringify(context, null, 2),
     "用户需求：\n" + feedback,
+  ].join("\n\n");
+  return { sys, user };
+}
+
+// ---------- 4.6) DECK PATCH：统一修改协议；模型一次看到完整 deck 上下文并自行决定修改范围 ----------
+export function deckPatchPrompt(context, feedback) {
+  const sys = [
+    "【模式：统一 Deck Patch】你正在修改一套已有 CardMaker deck。",
+    "你会拿到完整画布信息、运行时公共 CSS、deck 级 <style>、每页完整 <section>、页面度量和用户需求。",
+    "请自行判断需要修改的范围：可以只改某几页、只改全局 <style>、增删页面、调整结构，或组合执行。",
+    "输出只能是一个 JSON 对象，禁止解释文字、禁止 Markdown 代码围栏。",
+    "",
+    "JSON 结构：",
+    "{",
+    '  "reason": "一句话说明本次 patch 的设计/修改意图",',
+    '  "style": "完整 <style>...</style>；不修改全局样式则为空字符串",',
+    '  "pages": {"1": "完整 <section class=\\"card\\">...</section>，只放被替换的页"},',
+    '  "insert_pages": [{"after": 11, "page": {"role":"content","title":"标题","subtitle":"","content":[{"heading":"","text":""}]}, "html": "完整 <section class=\\"card\\">...</section>"}],',
+    '  "delete_pages": [3],',
+    '  "plan": null 或完整 plan JSON',
+    "}",
+    "",
+    "边界：",
+    "- 所有页码使用 1-based 页码；after=0 表示插入到最前面。",
+    "- pages 里每个值必须是可直接替换该页的完整 <section class=\"card\">。",
+    "- insert_pages[].html 必须是完整 <section class=\"card\">；insert_pages[].page 用于同步大纲，可给出简洁页面规格。",
+    "- style 若返回，必须是完整 deck 级 <style>，不要把 class 级样式散落到每页重复写。",
+    "- 不相关页面不要放进 pages，避免误改内容。",
+    "- 用户未要求重写内容时，保留原有正文语义和事实，不要为了排版改写整套内容。",
+    "- 关键视觉对象必须是实际 DOM 节点；不要依赖 ::before、::after、marker 等伪元素承载图标、编号、分割线或重要装饰。",
+    "- 禁止 <script>、外链脚本、iframe、object、embed。",
+    "- 固定画布导出会裁切 section 高度之外的内容；应用 patch 后必须让正文容器和卡片都不溢出。",
+    "",
+    STYLE_POLICY,
+    OVERFLOW_POLICY,
+    contextBlock(context),
+  ].join("\n");
+  const user = [
+    "用户需求：\n" + feedback,
+    "完整当前 deck 上下文：\n" + JSON.stringify(context, null, 2),
   ].join("\n\n");
   return { sys, user };
 }
@@ -428,15 +391,8 @@ export function stylePrompt(preset, P, currentStyle, feedback, deckReferenceHTML
     "可按用户意见精确修改已有 selector/class 规则，也可补充新的 class 规则；保留不相关规则和当前视觉系统。",
     "可调整配色 / 强调色、字体、组件外观、整体风格、跨页组件规范——设计判断由你做主。",
     COLOR_INTENT,
-    preset === "story" ? STORY_AESTHETIC : "",
-    preset === "story" ? STORY_DESIGN_METHOD : "",
-    preset === "story" ? STORY_ARTICLE_FLOW : "",
-    preset === "story"
-      ? "可调整导语、段落、小标题、引用、重点块、分隔等正文组件的样式、间距、层级和密度一致性；不要引入 header/footer/page number；不要给整篇文章外层、.card、.cm-main 或大段正文 wrapper 添加背景色；局部组件的背景、渐变、阴影必须兼容 light/dark；整体偏简约清爽，不要堆过多修饰。"
-      : "可调整 header/footer/title/subtitle/page number/内容块/section label 等跨页组件的样式、间距、层级和密度一致性。",
-    preset === "story"
-      ? "【保留 .cm-main 正文流结构】——只改视觉（配色/字体/线条/质感）和正文组件，不要新增 .cm-header / .cm-footer；不要用 ::before / ::after 做关键图标、分割线或列表符号，改用真实 DOM。"
-      : "【保留 .cm-header / .cm-main / .cm-footer 的常规流结构，别给它们加 position:absolute】——只改视觉（配色/字体/线条/质感），别动版面结构，否则各页会对不齐。",
+    "可调整 header/footer/title/subtitle/page number/内容块/section label 等跨页组件的样式、间距、层级和密度一致性。",
+    "【保留 .cm-header / .cm-main / .cm-footer 的常规流结构，别给它们加 position:absolute】——只改视觉（配色/字体/线条/质感），别动版面结构，否则各页会对不齐。",
     "不要输出 <section>，不要把 class 级样式分散写进每页 section 的 style 属性。",
     "若换中文字体：在 <style> 之前单独输出一行 <!--FONT key-->（key 从 " + FONTS + " 里选）。",
     "",

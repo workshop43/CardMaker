@@ -4,7 +4,7 @@
    这里保持无状态，只负责「一次 LLM 往返完成一个子任务」。
    ============================================================= */
 import { callModel, extractSection, extractStyle } from "./model.js";
-import { intentPrompt, planPrompt, designPrompt, renderPrompt, editPrompt, contentPatchPrompt, structurePrompt, stylePrompt } from "./prompts.js";
+import { intentPrompt, planPrompt, designPrompt, renderPrompt, editPrompt, contentPatchPrompt, deckPatchPrompt, structurePrompt, stylePrompt } from "./prompts.js";
 
 // 把 callModel 的「先思考(reasoning) 后正文(content)」两路流，归一成一个 onStream(text, isReasoning)。
 // 第二个参数标记这段是【思考】还是【正文】——思考绝不能渲染进卡片预览（推理模型常在思考里
@@ -71,6 +71,92 @@ function parseContentPatch(text) {
   patch.ops = patch.ops.map(normalizePatchOp).filter(Boolean);
   if (!patch.ops.length) throw new Error("内容补丁没有可执行操作。");
   return patch;
+}
+
+export async function makeDeckPatch(cfg, context, feedback, onStream) {
+  const { sys, user } = deckPatchPrompt(context, feedback);
+  const [onDelta, onThink] = adapt(onStream);
+  const raw = await callModel(cfg, sys, user, onDelta, onThink);
+  return parseDeckPatch(raw);
+}
+
+function parseDeckPatch(text) {
+  let s = String(text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "");
+  const a = s.indexOf("{"), b = s.lastIndexOf("}");
+  if (a !== -1 && b !== -1) s = s.slice(a, b + 1);
+  let patch;
+  try { patch = JSON.parse(s); } catch (e) { throw new Error("Deck patch 解析失败（模型未返回合法 JSON）。"); }
+  return normalizeDeckPatch(patch);
+}
+
+function normalizeDeckPatch(patch) {
+  if (!patch || typeof patch !== "object") throw new Error("Deck patch 为空。");
+  const pages = {};
+  Object.entries(patch.pages || {}).forEach(([key, html]) => {
+    const page = parseInt(key, 10);
+    const section = sanitizePatchSection(html);
+    if (page > 0 && section) pages[page] = section;
+  });
+  const insertPages = Array.isArray(patch.insert_pages) ? patch.insert_pages.map((item) => {
+    const section = sanitizePatchSection(item && item.html);
+    if (!section) return null;
+    return {
+      after: Math.max(0, parseInt(item.after, 10) || 0),
+      page: item.page && typeof item.page === "object" ? item.page : null,
+      html: section,
+    };
+  }).filter(Boolean) : [];
+  const deletePages = Array.isArray(patch.delete_pages)
+    ? Array.from(new Set(patch.delete_pages.map((n) => parseInt(n, 10)).filter((n) => n > 0)))
+    : [];
+  const style = normalizePatchStyle(patch.style);
+  const plan = patch.plan && typeof patch.plan === "object" && Array.isArray(patch.plan.pages) ? patch.plan : null;
+  if (!style && !Object.keys(pages).length && !insertPages.length && !deletePages.length && !plan) {
+    throw new Error("Deck patch 没有可执行修改。");
+  }
+  return {
+    reason: String(patch.reason || "").trim(),
+    style,
+    pages,
+    insert_pages: insertPages,
+    delete_pages: deletePages,
+    plan,
+  };
+}
+
+function normalizePatchStyle(style) {
+  const raw = String(style || "").trim();
+  if (!raw) return "";
+  const extracted = extractStyle(raw);
+  if (extracted) return stripUnsafeStyleHTML(extracted);
+  if (/[{}]/.test(raw)) return "<style>\n" + stripUnsafeCss(raw) + "\n</style>";
+  return "";
+}
+
+function stripUnsafeStyleHTML(style) {
+  return String(style || "").replace(/<script[\s\S]*?<\/script>/gi, "");
+}
+
+function stripUnsafeCss(css) {
+  return String(css || "")
+    .replace(/<\s*\/?\s*style[^>]*>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "");
+}
+
+function sanitizePatchSection(section) {
+  const raw = extractSection(String(section || ""));
+  if (!raw || typeof DOMParser === "undefined") return raw || "";
+  const doc = new DOMParser().parseFromString(raw, "text/html");
+  const card = doc.body.querySelector("section.card, section");
+  if (!card) return "";
+  card.classList.add("card");
+  card.querySelectorAll("script,iframe,object,embed,link").forEach((node) => node.remove());
+  card.querySelectorAll("*").forEach((node) => {
+    Array.from(node.attributes || []).forEach((attr) => {
+      if (/^on/i.test(attr.name)) node.removeAttribute(attr.name);
+    });
+  });
+  return card.outerHTML;
 }
 
 function normalizePatchOp(op) {
@@ -177,7 +263,7 @@ function sanitizeInlineStyle(styleText) {
 
 // 判断 inline style 属性是否属于布局/文字排版密度，而不是配色、装饰或风格系统。
 function isAllowedInlineStyleProp(prop) {
-  return /^(font-size|line-height|font-weight|text-align|display|grid-template|grid-template-columns|grid-template-rows|grid-column|grid-row|flex|flex-basis|flex-direction|flex-wrap|align-items|align-self|justify-content|gap|row-gap|column-gap|width|min-width|max-width|height|min-height|max-height|padding|padding-top|padding-right|padding-bottom|padding-left|margin|margin-top|margin-right|margin-bottom|margin-left)$/i.test(prop);
+  return /^(font-size|line-height|font-weight|text-align|vertical-align|display|grid-template|grid-template-columns|grid-template-rows|grid-column|grid-row|flex|flex-basis|flex-direction|flex-wrap|align-items|align-self|justify-content|justify-items|place-items|gap|row-gap|column-gap|width|min-width|max-width|height|min-height|max-height|padding|padding-top|padding-right|padding-bottom|padding-left|margin|margin-top|margin-right|margin-bottom|margin-left|transform|transform-origin)$/i.test(prop);
 }
 
 function pageRoleFromSection(section) {

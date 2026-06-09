@@ -5,7 +5,7 @@
 import { CardMaker } from "../deck.js";
 import { listProviders, defaultProvider, loadSaved, saveCfg, resolveCfg, setLastCfg } from "./model.js";
 import { extractStyle } from "./model.js";
-import { classifyIntent, makePlan, makeDesignSample, renderPage, editPage, makeContentPatch, revisePlanStructure, editStyle } from "./pipeline.js";
+import { classifyIntent, makePlan, makeDesignSample, renderPage, editPage, makeContentPatch, makeDeckPatch, revisePlanStructure, editStyle } from "./pipeline.js";
 
 // ─── 状态 ─────────────────────────────────────────────────────────────────────
 let P = null;   // 面板 DOM 引用 { msgs, input, send, styleFile, styleStatus }
@@ -280,13 +280,11 @@ async function handleSend(app) {
     reviseDraftPlan(app, cfg, text);
     return;
   }
-  let intent;
-  try {
-    intent = await runIntent(app, cfg, text);
-  } catch (e) {
+  if (!app.cards.length) {
+    runGenerate(app, cfg, text);
     return;
   }
-  routeIntent(app, cfg, text, intent);
+  runDeckPatch(app, cfg, text);
 }
 
 async function runIntent(app, cfg, text) {
@@ -299,6 +297,7 @@ async function runIntent(app, cfg, text) {
     m.done();
     m.setHtml("已理解需求，开始处理。");
     endJob(job);
+    console.info("[CardMaker AI] intent", { text, intent });
     if (!intent || intent.intent === "unknown") throw new Error("unknown intent");
     return intent;
   } catch (e) {
@@ -340,21 +339,8 @@ function runQuickAction(app, key) {
   if (!action) return;
   if (!cfg) { addAIMsg("请先点击右上角 ⚙ 配置 API Key。"); openSettings(app); return; }
   addUserMsg(action.label);
-  if (action.type === "style") {
-    if (!ensureSessionFromDeck(app, cfg)) { addAIMsg("当前没有可调整的 deck。"); return; }
-    doStyleEdit(app, action.prompt);
-    return;
-  }
-  if (action.type === "structure") {
-    if (!ensureSessionFromDeck(app, cfg)) { addAIMsg("当前没有可继续生成的 deck。"); return; }
-    runStructureEdit(app, cfg, action.prompt);
-    return;
-  }
-  if (action.type === "page") {
-    if (!ensureSessionFromDeck(app, cfg)) { addAIMsg("当前没有可修改的页面。"); return; }
-    const sourceIdx = sourcePageIdxFromViewIdx(app.index);
-    runEdit(app, cfg, action.prompt, { intent: "edit_page", target_pages: [sourceIdx + 1], reference_page: null, allow_content_change: !!action.allowContentChange });
-  }
+  if (!ensureSessionFromDeck(app, cfg)) { addAIMsg("当前没有可修改的 deck。"); return; }
+  runDeckPatch(app, cfg, action.prompt);
 }
 
 // 快捷操作配置：按钮文案和实际发送给对应 pipeline 的精确任务说明。
@@ -393,6 +379,191 @@ function quickActionSpec(key) {
     },
   };
   return actions[key] || null;
+}
+
+// 统一编辑入口：已有 deck 的用户需求全部交给同一个 patch 协议处理。
+async function runDeckPatch(app, cfg, feedback) {
+  if (!ensureSessionFromDeck(app, cfg)) {
+    addAIMsg("当前没有可修改的 deck。");
+    return;
+  }
+  const job = beginJob();
+  const runCfg = cfgWithSignal(cfg, job);
+  const m = streamMsg();
+  m.setText("正在生成整套 deck 修改补丁…");
+  try {
+    const context = deckPatchContext(app, "deck_patch");
+    const patch = await makeDeckPatch(runCfg, context, feedback);
+    console.info("[CardMaker AI] deck patch", { feedback, patch });
+    const result = applyDeckPatch(app, patch);
+    let report = checkDeckAfterPatch(app);
+    if (report.errors.length && !job.controller.signal.aborted) {
+      m.setText("已应用补丁，正在根据检查结果自动修复…");
+      const repairFeedback = [
+        "原始用户需求：",
+        feedback,
+        "",
+        "第一次 patch 后检查未通过，请只修复检查报告中的问题，保留已正确完成的修改。",
+        JSON.stringify(report, null, 2),
+      ].join("\n");
+      const repair = await makeDeckPatch(runCfg, deckPatchContext(app, "deck_patch_repair"), repairFeedback);
+      console.info("[CardMaker AI] deck patch repair", { repair, report });
+      const repairResult = applyDeckPatch(app, repair);
+      result.changedPages = Array.from(new Set(result.changedPages.concat(repairResult.changedPages))).sort((a, b) => a - b);
+      result.insertedPages += repairResult.insertedPages;
+      result.deletedPages += repairResult.deletedPages;
+      result.styleChanged = result.styleChanged || repairResult.styleChanged;
+      report = checkDeckAfterPatch(app);
+    }
+    m.done();
+    const summary = formatDeckPatchDone(result, report);
+    m.setHtml(summary);
+    endJob(job);
+  } catch (e) {
+    m.done();
+    m.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
+    endJob(job);
+  }
+}
+
+// 给统一 patch 的完整上下文：包含全量 HTML，而不是只给摘要。
+function deckPatchContext(app, purpose) {
+  const total = editTotalPages(app);
+  const pages = (S.sections || []).map((html, i) => ({
+    page: i + 1,
+    generated: !!html,
+    html: html || "",
+    text: compactText(htmlText(html || "")).slice(0, 2400),
+  }));
+  return {
+    full_context: fullDeckContext(app, { purpose: purpose || "deck_patch", styleText: currentDesignStyle(app) }),
+    current_page: sourcePageIdxFromViewIdx(app.index) + 1,
+    total_pages: total,
+    preset: app.preset,
+    title: app.title || "",
+    plan: S.plan || null,
+    style: currentDesignStyle(app),
+    deck_html: app.getHTML(),
+    pages,
+  };
+}
+
+// 应用模型返回的统一 patch。这里只做结构边界和危险标签处理，不替模型做意图过滤。
+function applyDeckPatch(app, patch) {
+  if (!S || !S.sections) throw new Error("当前 deck 会话不存在。");
+  const result = { changedPages: [], insertedPages: 0, deletedPages: 0, styleChanged: false, reason: patch.reason || "" };
+  const totalBefore = S.sections.length;
+  const focus = { sourceIdx: -1 };
+  if (patch.style) {
+    S.designStyle = patch.style;
+    result.styleChanged = true;
+  } else {
+    preserveDesignStyleBeforeRebuild(app);
+  }
+  if (patch.plan) S.plan = patch.plan;
+  ensurePlanShape();
+
+  const deletes = (patch.delete_pages || [])
+    .map((n) => parseInt(n, 10) - 1)
+    .filter((idx) => idx >= 0 && idx < S.sections.length)
+    .sort((a, b) => b - a);
+  deletes.forEach((idx) => {
+    S.sections.splice(idx, 1);
+    if (S.plan && Array.isArray(S.plan.pages)) S.plan.pages.splice(idx, 1);
+    result.deletedPages++;
+  });
+
+  Object.entries(patch.pages || {}).forEach(([page, html]) => {
+    const idx = parseInt(page, 10) - 1;
+    if (idx < 0 || idx >= S.sections.length || !html) return;
+    S.sections[idx] = html;
+    result.changedPages.push(idx + 1);
+    if (focus.sourceIdx < 0) focus.sourceIdx = idx;
+  });
+
+  const inserts = (patch.insert_pages || []).slice().sort((a, b) => a.after - b.after);
+  inserts.forEach((item) => {
+    const idx = Math.max(0, Math.min(S.sections.length, parseInt(item.after, 10) || 0));
+    S.sections.splice(idx, 0, item.html);
+    if (S.plan && Array.isArray(S.plan.pages)) S.plan.pages.splice(idx, 0, normalizeInsertedPageSpec(item.page, idx));
+    result.insertedPages++;
+    result.changedPages.push(idx + 1);
+    if (focus.sourceIdx < 0) focus.sourceIdx = idx;
+  });
+
+  if (patch.plan && Array.isArray(patch.plan.pages) && patch.plan.pages.length !== S.sections.length) {
+    S.plan.pages = S.sections.map((section, i) => (patch.plan.pages && patch.plan.pages[i]) || sectionToPageSpec(section, i));
+  }
+  renumberSessionSections();
+  applySections(app, focus.sourceIdx >= 0 ? focus.sourceIdx : Math.max(0, Math.min(S.sections.length - 1, totalBefore - 1)));
+  return result;
+}
+
+function ensurePlanShape() {
+  if (!S.plan) {
+    S.plan = { title: S.app && S.app.title || "deck", scene: "", theme: "", font: "", pages: [] };
+  }
+  if (!Array.isArray(S.plan.pages)) S.plan.pages = [];
+  while (S.plan.pages.length < S.sections.length) {
+    S.plan.pages.push(sectionToPageSpec(S.sections[S.plan.pages.length], S.plan.pages.length));
+  }
+}
+
+function normalizeInsertedPageSpec(page, idx) {
+  if (page && typeof page === "object") {
+    return {
+      role: page.role || "content",
+      title: page.title || "第 " + (idx + 1) + " 页",
+      subtitle: page.subtitle || "",
+      content: Array.isArray(page.content) ? page.content : [],
+    };
+  }
+  return sectionToPageSpec(S.sections[idx] || "", idx);
+}
+
+function renumberSessionSections() {
+  const total = S.sections.length;
+  S.sections = S.sections.map((section, i) => section ? normalizeSectionPageNumber(section, i + 1, total) : section);
+}
+
+function checkDeckAfterPatch(app) {
+  const report = { ok: true, errors: [], warnings: [], pages: [] };
+  if (!extractStyleFromDeck(app)) report.errors.push("deck 级 <style> 缺失，整套样式可能丢失。");
+  (app.cards || []).forEach((card, i) => {
+    const main = card.querySelector(".cm-main");
+    const page = {
+      page: i + 1,
+      card_overflows: !!(card.scrollHeight && card.clientHeight && card.scrollHeight > card.clientHeight + 1),
+      main_overflows: !!(main && main.scrollHeight && main.clientHeight && main.scrollHeight > main.clientHeight + 1),
+      card_height: Math.round(card.clientHeight || 0),
+      card_scroll_height: Math.round(card.scrollHeight || 0),
+      main_height: main ? Math.round(main.clientHeight || 0) : null,
+      main_scroll_height: main ? Math.round(main.scrollHeight || 0) : null,
+    };
+    if (page.card_overflows || page.main_overflows) {
+      report.errors.push("第 " + (i + 1) + " 页内容溢出卡片或正文区域。");
+    }
+    report.pages.push(page);
+  });
+  const style = extractStyleFromDeck(app);
+  if (/::before|::after|::marker/i.test(style)) {
+    report.warnings.push("style 中仍包含伪元素规则；重要视觉对象建议使用真实 DOM。");
+  }
+  report.ok = report.errors.length === 0;
+  return report;
+}
+
+function formatDeckPatchDone(result, report) {
+  const parts = [];
+  if (result.styleChanged) parts.push("全局样式已更新");
+  if (result.changedPages.length) parts.push("已更新第 " + Array.from(new Set(result.changedPages)).sort((a, b) => a - b).join("、") + " 页");
+  if (result.insertedPages) parts.push("新增 " + result.insertedPages + " 页");
+  if (result.deletedPages) parts.push("删除 " + result.deletedPages + " 页");
+  if (!parts.length) parts.push("deck 已更新");
+  const check = report.errors.length
+    ? '<br><span class="cm-err">检查仍发现问题：' + escapeHtml(report.errors.join("；")) + "</span>"
+    : "<br>已完成样式和溢出检查。";
+  return parts.join("，") + "。" + check;
 }
 
 function intentContext(app) {
@@ -481,13 +652,14 @@ function fullDeckContext(app, opts) {
 // LLM 可用于单页排版密度微调的 inline style 属性；执行层会按同一组属性过滤。
 function allowedPageInlineStyleProps() {
   return [
-    "font-size", "line-height", "font-weight", "text-align",
+    "font-size", "line-height", "font-weight", "text-align", "vertical-align",
     "display", "grid-template", "grid-template-columns", "grid-template-rows", "grid-column", "grid-row",
-    "flex", "flex-basis", "flex-direction", "flex-wrap", "align-items", "align-self", "justify-content",
+    "flex", "flex-basis", "flex-direction", "flex-wrap", "align-items", "align-self", "justify-content", "justify-items", "place-items",
     "gap", "row-gap", "column-gap",
     "width", "min-width", "max-width", "height", "min-height", "max-height",
     "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
     "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
+    "transform", "transform-origin",
   ];
 }
 
@@ -534,7 +706,7 @@ function deckLayoutMetrics(app) {
       title: elementMetrics(card.querySelector("h1,h2,.cm-display,.cm-title"), card),
       subtitle: elementMetrics(card.querySelector(".cm-subtitle"), card),
       text_density: textDensityMetrics(card),
-      components: Array.from(card.querySelectorAll(".cm-cell,.cm-grid,.cm-split,.cm-row,.cm-col,.cm-flow,.cm-feature-row,.cm-callout,.cm-band,.cm-mosaic,.cm-bento,.cm-compare,.cm-compare-col,.cm-process,.cm-step,.cm-insight,.cm-pullquote,.cm-metric-row,.cm-mini-card,.cm-stat,.cm-checklist,.cm-tag,.cm-chip"))
+      components: Array.from(card.querySelectorAll(".cm-cell,.cm-grid,.cm-split,.cm-row,.cm-col,.cm-flow,.cm-feature-row,.cm-callout,.cm-band,.cm-mosaic,.cm-bento,.cm-compare,.cm-compare-col,.cm-process,.cm-step,.cm-insight,.cm-pullquote,.cm-metric-row,.cm-mini-card,.cm-stat,.cm-checklist,.cm-tag,.cm-chip,svg,[class*=\"icon\"],[class*=\"Icon\"],[class*=\"mark\"],[class*=\"Mark\"],[class*=\"bullet\"],[class*=\"Bullet\"]"))
         .slice(0, 20)
         .map((node) => elementMetrics(node, card)),
       overflow: {
@@ -552,7 +724,7 @@ function deckLayoutMetrics(app) {
 // 汇总当前页正文元素的字号/行高，帮助模型判断是否需要缩小正文密度。
 function textDensityMetrics(card) {
   if (!card || typeof getComputedStyle === "undefined") return null;
-  const nodes = Array.from(card.querySelectorAll(".cm-main p,.cm-main li,.cm-main span,.cm-main h3,.cm-main .cm-cell,.cm-main .cm-feature-body,.cm-main .cm-mini-card"));
+  const nodes = Array.from(card.querySelectorAll(".cm-main p,.cm-main li,.cm-main span,.cm-main h3,.cm-main svg,.cm-main [class*=\"icon\"],.cm-main [class*=\"Icon\"],.cm-main [class*=\"mark\"],.cm-main [class*=\"Mark\"],.cm-main [class*=\"bullet\"],.cm-main [class*=\"Bullet\"],.cm-main .cm-cell,.cm-main .cm-feature-body,.cm-main .cm-mini-card"));
   const samples = nodes.slice(0, 40).map((node) => {
     const cs = getComputedStyle(node);
     return {
@@ -659,7 +831,7 @@ function runtimeComponentCss() {
 
 // 判断一条 CSSOM 规则是否属于卡片运行时、画布尺寸或公共组件定义。
 function isCardComponentRule(css) {
-  return /(\.cm-app\[data-preset=|\.cm-cards|\.card\b|\.cm-(header|main|footer|page|row|col|grid|split|between|items-center|center|middle|top|fill|text-center|muted|accent|sm|text|leading|compact|dense|pad|kicker|display|lead|tag|ghost|num|divider|titlebar|title|subtitle|cell|outline|flow|feature|callout|band|mosaic|bento|compare|process|step|insight|pullquote|metric|mini-card|span|stat|quote|bar|chip|checklist|mt|mb|gap|deco|watermark))/i.test(String(css || ""));
+  return /(\.cm-app\[data-preset=|\.cm-cards|\.card\b|\.cm-(header|main|footer|page|row|col|grid|split|between|items-center|center|middle|top|fill|text-center|muted|accent|sm|text|leading|compact|dense|pad|kicker|display|lead|tag|ghost|num|divider|titlebar|title|subtitle|cell|outline|flow|feature|callout|band|mosaic|bento|compare|process|step|insight|pullquote|metric|mini-card|span|stat|quote|bar|chip|checklist|list-icon|list-body|mt|mb|gap|deco|watermark))/i.test(String(css || ""));
 }
 
 function newConversation(app) {
@@ -682,9 +854,7 @@ async function runGenerate(app, cfg, topic) {
   const m1 = streamMsg();
   m1.setText("正在构思内容大纲…");
   try {
-    // 微信公众号是单篇长文，不走 deck 分页规划；其他比例仍由模型按内容复杂度决定页数。
-    const requestedPages = preset === "story" ? 1 : null;
-    S.plan = await makePlan(runCfg, preset, requestedPages, topic, fullDeckContext(app, { purpose: "plan" }));
+    S.plan = await makePlan(runCfg, preset, null, topic, fullDeckContext(app, { purpose: "plan" }));
   } catch (e) {
     m1.done();
     m1.setHtml(isAbortError(e) ? "已停止。" : '<span class="cm-err">失败：' + escapeHtml(String(e.message || e)) + "</span>");
@@ -733,31 +903,28 @@ async function runDesign(app) {
   S.cfg = cfgWithSignal(S.cfg, job);
   S.aborted = false;
   const m = streamMsg();
-  const isStory = S.preset === "story";
-  m.setText(isStory
-    ? (S.uploadedStyle ? "正在套用上传样式" : "正在设计公众号正文样式") + " + 排公众号长文，请稍候…"
-    : (S.uploadedStyle ? "正在套用上传样式" : "正在设计风格") + " + 排封面和第一个内容页，请稍候…");
+  m.setText((S.uploadedStyle ? "正在套用上传样式" : "正在设计风格") + " + 排封面和第一个内容页，请稍候…");
   try {
     S.sampleIdx = pickSampleIdx(S.plan);
     if (S.uploadedStyle && S.uploadedStyle.style) {
       S.designStyle = S.uploadedStyle.style;
-      m.setText(isStory ? "正在使用上传样式生成公众号长文…" : "正在使用上传样式生成第一个内容页…");
+      m.setText("正在使用上传样式生成第一个内容页…");
     } else {
       const r = await makeDesignSample(S.cfg, S.preset, S.PSet, S.plan, S.plan.pages[S.sampleIdx],
         S.sampleIdx + 1, S.plan.pages.length, fullDeckContext(app, { purpose: "design" }),
-        (txt, thinking) => { if (!thinking) m.setText(isStory ? "正在设计公众号正文样式…" : "正在设计风格…"); });
+        (txt, thinking) => { if (!thinking) m.setText("正在设计风格…"); });
       S.designStyle = r.style;
       S.sampleSection = r.section;
       if (S.sampleSection) S.sections[S.sampleIdx] = S.sampleSection;
     }
     if (!S.sections[S.sampleIdx]) {
-      m.setText(isStory ? "正在生成公众号长文…" : "正在生成第一个内容页…");
+      m.setText("正在生成第一个内容页…");
       S.sections[S.sampleIdx] = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle,
         S.plan.pages[S.sampleIdx], "", S.sampleIdx + 1, S.plan.pages.length, "", fullDeckContext(app, { purpose: "render", styleText: S.designStyle }));
     }
 
     const coverIdx = pickCoverIdx(S.plan);
-    if (!isStory && coverIdx !== S.sampleIdx && !S.sections[coverIdx]) {
+    if (coverIdx !== S.sampleIdx && !S.sections[coverIdx]) {
       m.setText("正在生成封面…");
       S.sections[coverIdx] = await renderPage(S.cfg, S.preset, S.PSet, S.plan, S.designStyle,
         S.plan.pages[coverIdx], "", coverIdx + 1, S.plan.pages.length, confirmedLayoutReference(coverIdx), fullDeckContext(app, { purpose: "render", styleText: S.designStyle }));
@@ -767,14 +934,6 @@ async function runDesign(app) {
     m.done();
     applySections(app);
     app.goTo(0);
-    if (S.preset === "story") {
-      m.setHtml("公众号长文已生成，请查看左侧画布。确认后可点击画布旁的「复制公众号 HTML」，粘贴到公众号编辑器。");
-      setMsgActions(m.el, [
-        { label: "重新生成长文", onClick: () => resetInitialPagesAndDesign(app) },
-      ]);
-      endJob(job);
-      return;
-    }
     m.setHtml("封面和第一个内容页已就绪，请查看左侧画布。确认通过后再继续生成后续页面。");
     m.addActions([
       { label: "重做前两页", onClick: () => resetInitialPagesAndDesign(app) },
@@ -794,7 +953,7 @@ function resetInitialPagesAndDesign(app) {
   S.sections = [];
   S.nextIdx = 0;
   S.sampleSection = "";
-  addUserMsg(S.preset === "story" ? "（重新生成公众号长文）" : "（重做封面和第一个内容页）");
+  addUserMsg("（重做封面和第一个内容页）");
   runDesign(app);
 }
 
@@ -1052,7 +1211,7 @@ function coveredInlineProps(node, classProps) {
 }
 
 function isDeckStyleMigratableProp(prop) {
-  return /^(font-size|line-height|font-weight|text-align|display|grid-template|grid-template-columns|grid-template-rows|grid-column|grid-row|flex|flex-basis|flex-direction|flex-wrap|align-items|align-self|justify-content|gap|row-gap|column-gap|width|min-width|max-width|height|min-height|max-height|padding|padding-top|padding-right|padding-bottom|padding-left|margin|margin-top|margin-right|margin-bottom|margin-left)$/i.test(prop);
+  return /^(font-size|line-height|font-weight|text-align|vertical-align|display|grid-template|grid-template-columns|grid-template-rows|grid-column|grid-row|flex|flex-basis|flex-direction|flex-wrap|align-items|align-self|justify-content|justify-items|place-items|gap|row-gap|column-gap|width|min-width|max-width|height|min-height|max-height|padding|padding-top|padding-right|padding-bottom|padding-left|margin|margin-top|margin-right|margin-bottom|margin-left|transform|transform-origin)$/i.test(prop);
 }
 
 // 读取用户上传的样式文件，作为当前 conversation 的样式附件。
@@ -1133,12 +1292,34 @@ function slug(s) {
 }
 
 // ─── 辅助 ─────────────────────────────────────────────────────────────────────
-function applySections(app) {
-  const html = (S.designStyle || "") + "\n" + S.sections.filter(Boolean).join("\n");
+function applySections(app, focusSourceIdx) {
+  const style = preserveDesignStyleBeforeRebuild(app);
+  const html = (style || "") + "\n" + S.sections.filter(Boolean).join("\n");
   if (S.plan && S.plan.title) app.title = S.plan.title;
   app.setHTML(html);
   refreshSessionSectionsFromDeck(app);
-  app.goTo(Math.max(0, S.sections.filter(Boolean).length - 1));
+  const focusViewIdx = focusSourceIdx == null ? -1 : viewIdxFromSourcePageIdx(focusSourceIdx);
+  app.goTo(focusViewIdx >= 0 ? focusViewIdx : Math.max(0, S.sections.filter(Boolean).length - 1));
+}
+
+// 结构调整 / 续生成会整套重建 DOM。重建前必须保住 deck 级 <style>，
+// 否则从导出 HTML 恢复或会话状态不同步时，会把已有页面变成无主题裸卡。
+function preserveDesignStyleBeforeRebuild(app) {
+  if (!S) return "";
+  const currentStyle = extractStyleFromDeck(app);
+  if (currentStyle) {
+    S.designStyle = currentStyle;
+    return currentStyle;
+  }
+  if (S.designStyle) return S.designStyle;
+  const snapshot = styleSnapshotFromDeck(app);
+  if (snapshot) {
+    console.warn("[CardMaker AI] deck style missing before rebuild; using computed style snapshot");
+    S.designStyle = snapshot;
+    return snapshot;
+  }
+  console.warn("[CardMaker AI] deck style missing before rebuild; rebuilding without style");
+  return "";
 }
 
 // 当前画布只渲染已生成页面，view index 需要映射回 plan/sections 的原始 page index。
@@ -1214,7 +1395,9 @@ async function runContentPatch(app, cfg, feedback, intent) {
   try {
     const context = contentPatchContext(app, intent);
     const patch = await makeContentPatch(runCfg, context, feedback);
+    console.info("[CardMaker AI] content patch", { feedback, intent, patch });
     const result = applyContentPatch(app, patch, intent);
+    console.info("[CardMaker AI] content patch result", result);
     if (!result.changed.length) throw new Error("补丁没有命中任何内容或组件。请明确页码、组件名或要替换的原文字。");
     app.patchDeck({ pages: result.pages });
     syncPatchedSections(result.pages);
@@ -1261,6 +1444,16 @@ function selectorHints() {
     ".cm-subtitle",
     ".cm-cell",
     ".cm-kicker",
+    ".cm-checklist",
+    ".cm-checklist li",
+    ".cm-main li",
+    ".cm-main ul",
+    ".cm-list-icon",
+    ".cm-list-body",
+    ".cm-main svg",
+    ".cm-main [class*=\"icon\"]",
+    ".cm-main [class*=\"mark\"]",
+    ".cm-main [class*=\"bullet\"]",
   ];
 }
 
@@ -1275,6 +1468,7 @@ function applyContentPatch(app, patch, intent) {
   const total = editTotalPages(app);
   const pages = {};
   const changed = [];
+  const details = [];
   let count = 0;
   const touched = new Map();
   (patch.ops || []).forEach((op) => {
@@ -1282,15 +1476,42 @@ function applyContentPatch(app, patch, intent) {
     sourceIdxs.forEach((sourceIdx) => {
       const target = getPatchTarget(app, sourceIdx, touched);
       if (!target) return;
+      const debug = patchOpDebugInfo(target, op);
       const before = target.card.outerHTML;
-      count += applyPatchOp(target, op);
+      const applied = applyPatchOp(target, op);
+      count += applied;
+      debug.applied = applied;
       if (target.card.outerHTML !== before) {
         pages[target.viewIdx] = target.card.outerHTML;
         if (!changed.some((p) => p.sourceIdx === sourceIdx)) changed.push({ sourceIdx, viewIdx: target.viewIdx });
       }
+      details.push(debug);
     });
   });
-  return { pages, changed, count };
+  return { pages, changed, count, details };
+}
+
+function patchOpDebugInfo(target, op) {
+  let matchCount = 0;
+  try {
+    matchCount = op.selector ? target.card.querySelectorAll(op.selector).length : 1;
+  } catch (e) {
+    matchCount = -1;
+  }
+  const info = {
+    page: target.sourceIdx + 1,
+    op: op.op,
+    selector: op.selector || "",
+    match_count: matchCount,
+  };
+  if (op.op === "set_style") {
+    info.requested_style = String(op.style || "");
+    info.kept_style = sanitizePatchStyle(op.style);
+  } else if (op.op === "set_attr" && String(op.name || "").toLowerCase() === "style") {
+    info.requested_style = String(op.value || "");
+    info.kept_style = sanitizePatchStyle(op.value);
+  }
+  return info;
 }
 
 function patchOpTargets(op, fallback, total) {
@@ -1401,7 +1622,7 @@ function sanitizePatchStyle(styleText) {
     .filter((decl) => {
       const i = decl.indexOf(":");
       if (i <= 0) return false;
-      return /^(font-size|line-height|font-weight|text-align|display|grid-template|grid-template-columns|grid-template-rows|grid-column|grid-row|flex|flex-basis|flex-direction|flex-wrap|align-items|align-self|justify-content|gap|row-gap|column-gap|width|min-width|max-width|height|min-height|max-height|padding|padding-top|padding-right|padding-bottom|padding-left|margin|margin-top|margin-right|margin-bottom|margin-left)$/i.test(decl.slice(0, i).trim());
+      return /^(font-size|line-height|font-weight|text-align|vertical-align|display|grid-template|grid-template-columns|grid-template-rows|grid-column|grid-row|flex|flex-basis|flex-direction|flex-wrap|align-items|align-self|justify-content|justify-items|place-items|gap|row-gap|column-gap|width|min-width|max-width|height|min-height|max-height|padding|padding-top|padding-right|padding-bottom|padding-left|margin|margin-top|margin-right|margin-bottom|margin-left|transform|transform-origin)$/i.test(decl.slice(0, i).trim());
     })
     .join("; ");
 }
@@ -1753,7 +1974,7 @@ function builtinComponentClasses() {
     "cm-callout", "cm-band", "cm-mosaic", "cm-bento", "cm-span-2", "cm-compare", "cm-compare-col",
     "cm-process", "cm-step", "cm-step-num", "cm-insight", "cm-insight-mark", "cm-pullquote", "cm-metric-row", "cm-mini-card",
     "cm-stat", "cm-stat-num", "cm-stat-label",
-    "cm-checklist", "cm-chip", "cm-tag", "cm-ghost", "cm-kicker", "cm-title", "cm-subtitle",
+    "cm-checklist", "cm-list-icon", "cm-list-body", "cm-chip", "cm-tag", "cm-ghost", "cm-kicker", "cm-title", "cm-subtitle",
     "cm-titlebar", "cm-lead", "cm-display", "cm-muted", "cm-accent", "cm-sm",
     "cm-text-xs", "cm-text-sm", "cm-text-md", "cm-text-lg", "cm-leading-tight", "cm-leading-normal", "cm-leading-loose", "cm-compact", "cm-dense",
     "cm-bar", "cm-divider",

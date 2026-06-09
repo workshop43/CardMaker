@@ -69,38 +69,6 @@
   /* 标题不宜过大：720 高度有限，标题过大既占满高度又把正文衬得很小 */
   --cm-h3: 38px;    --cm-h2: 48px;       --cm-h1: 62px;       --cm-display: 90px;
 }
-/* 微信公众号图文排版：纵向文章流预览，字号按可粘贴到公众号后的阅读密度控制 */
-.cm-app[data-preset="story"] {
-  --cm-pad: 24px;
-  --cm-text: 16px;  --cm-text-sm: 13px;  --cm-kicker: 12px;
-  --cm-h3: 18px;    --cm-h2: 22px;       --cm-h1: 30px;       --cm-display: 36px;
-}
-.cm-app[data-preset="story"] .card {
-  --cm-card-bg: #ffffff;
-  --cm-bg: #ffffff;
-  --cm-fg: #1d1d1f;
-  --cm-muted: #57606a;
-  --cm-line: rgba(0, 0, 0, 0.08);
-  --cm-accent: #576b95;
-  --cm-surface: #f7f8fa;
-  --cm-surface-strong: #eef2f8;
-  --cm-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-  background: #ffffff !important;
-}
-.cm-app[data-preset="story"] .card[data-theme="dark"],
-.cm-app[data-preset="story"] .card[data-theme="night"] {
-  --cm-card-bg: #191919;
-  --cm-bg: #191919;
-  --cm-fg: rgba(255, 255, 255, 0.9);
-  --cm-muted: rgba(255, 255, 255, 0.62);
-  --cm-line: rgba(255, 255, 255, 0.12);
-  --cm-accent: #8aa4d6;
-  --cm-surface: rgba(255, 255, 255, 0.06);
-  --cm-surface-strong: rgba(255, 255, 255, 0.1);
-  --cm-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
-  background: #191919 !important;
-}
-
 /* ---------- 2. 应用界面骨架 ---------- */
 .cm-app {
   position: fixed;
@@ -231,102 +199,6 @@
   overflow: hidden;
   min-height: 0;
 }
-.cm-story-tools {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  display: none;
-  align-items: center;
-  gap: 8px;
-  z-index: 12;
-}
-.cm-app[data-preset="story"] .cm-story-tools { display: flex; }
-.cm-story-tools[hidden] { display: none !important; }
-.cm-story-title {
-  display: none;
-  position: relative;
-  width: 430px;
-  box-sizing: border-box;
-  padding: 14px 16px;
-  border: 1px solid var(--cm-story-title-line, rgba(0, 0, 0, 0.08));
-  border-radius: 10px;
-  background: var(--cm-story-title-bg, #fff);
-  color: var(--cm-story-title-fg, #1d1d1f);
-  font-family: var(--cm-font-sans);
-  box-shadow: var(--cm-story-title-shadow, 0 10px 28px rgba(0, 0, 0, 0.08));
-}
-.cm-app[data-preset="story"] .cm-story-title {
-  display: flex;
-  margin-bottom: 12px;
-}
-.cm-story-title[data-theme="dark"] {
-  --cm-story-title-bg: #191919;
-  --cm-story-title-fg: rgba(255, 255, 255, 0.9);
-  --cm-story-title-line: rgba(255, 255, 255, 0.12);
-  --cm-story-title-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
-  --cm-story-title-copy-bg: rgba(255, 255, 255, 0.08);
-  --cm-story-title-copy-bg-hover: rgba(255, 255, 255, 0.13);
-  --cm-story-title-copy-fg: rgba(255, 255, 255, 0.9);
-  --cm-story-title-copy-line: rgba(255, 255, 255, 0.12);
-}
-.cm-story-title[hidden] {
-  display: none !important;
-}
-.cm-story-title-text {
-  min-width: 0;
-  overflow: visible;
-  overflow-wrap: anywhere;
-  white-space: normal;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.35;
-}
-.cm-story-title-copy {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  border: 1px solid var(--cm-story-title-copy-line, rgba(0, 0, 0, 0.08));
-  border-radius: 8px;
-  background: var(--cm-story-title-copy-bg, #f6f7f9);
-  color: var(--cm-story-title-copy-fg, #1d1d1f);
-  cursor: pointer;
-  font: 12px/1 var(--cm-font-sans);
-  padding: 8px 10px;
-  opacity: 0;
-  transform: translateY(2px);
-  transition: opacity 0.16s ease, transform 0.16s ease, background 0.16s ease;
-}
-.cm-story-title:hover .cm-story-title-copy,
-.cm-story-title-copy:focus {
-  opacity: 1;
-  transform: translateY(0);
-}
-.cm-story-title-copy:hover { background: var(--cm-story-title-copy-bg-hover, #eceff3); }
-.cm-story-theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(8px);
-}
-.cm-story-theme-btn {
-  appearance: none;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #c9ced8;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  line-height: 1;
-  padding: 7px 10px;
-}
-.cm-story-theme-btn.is-active {
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
-}
 .cm-scaler {
   transform-origin: center center;
   /* 不加 transition：缩放需精确跟随舞台尺寸（开关编辑器/改窗口时由 ResizeObserver 实时重算），
@@ -360,47 +232,6 @@
 .cm-app[data-preset="square"] .card { width: 1080px; height: 1080px; }
 .cm-app[data-preset="ppt"] .cm-cards,
 .cm-app[data-preset="ppt"] .card { width: 1280px; height: 720px; }
-.cm-app[data-preset="story"] .cm-cards,
-.cm-app[data-preset="story"] .card { width: 430px; min-height: 932px; height: auto; }
-.cm-app[data-preset="story"] .cm-stage { align-items: flex-start; overflow: auto; padding: 24px 0; }
-.cm-app[data-preset="story"] .cm-scaler {
-  transform-origin: top center;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-}
-.cm-app[data-preset="story"] .card { justify-content: flex-start; overflow: visible; }
-.cm-app[data-preset="story"] .cm-main {
-  display: block;
-  flex: none;
-  min-height: 0;
-  max-width: 100%;
-  gap: 0;
-  background: transparent !important;
-  background-image: none !important;
-}
-.cm-app[data-preset="story"] .cm-main,
-.cm-app[data-preset="story"] .cm-main * {
-  box-sizing: border-box;
-}
-.cm-app[data-preset="story"] .cm-main > * {
-  margin-top: 0;
-  max-width: 100%;
-  min-width: 0;
-}
-.cm-app[data-preset="story"] .cm-main :where(section, article, div, aside, blockquote, figure, p, ul, ol, li) {
-  max-width: 100%;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.cm-app[data-preset="story"] .cm-main :where([style*="width"], [style*="min-width"]) {
-  max-width: 100% !important;
-  min-width: 0 !important;
-}
-.cm-app[data-preset="story"] .cm-nav { display: none; }
-.cm-app[data-preset="story"] .cm-header,
-.cm-app[data-preset="story"] .cm-footer,
-.cm-app[data-preset="story"] .cm-page { display: none !important; }
 
 /* ---------- 5. 卡片基础排版（让最简单的 HTML 也好看） ---------- */
 .card {
@@ -886,18 +717,32 @@
 .cm-quote-mark { font-size: 220px; line-height: 0.7; color: var(--cm-accent); opacity: 0.35; font-family: Georgia, serif; height: 0.52em; margin-bottom: 0.1em; }
 .cm-quote-text { font-size: 1.75em; line-height: 1.5; font-weight: 700; } /* 金句是主角，随比例放大 */
 
-/* 强调条 / chip / 圆点项目符 */
+/* 强调条 / chip / 真实 DOM 清单图标 */
 .cm-bar { width: 88px; height: 8px; border-radius: 999px; background: var(--cm-accent); margin-bottom: var(--cm-gap); }
 .cm-chip { display: inline-flex; align-items: center; gap: 8px; font-size: var(--cm-text-sm); font-weight: 600; padding: 8px 18px; border-radius: 999px; border: 2px solid var(--cm-line); }
 .cm-checklist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 28px; }
-/* 悬挂缩进：圆点绝对定位，正文按段落自然换行——兼容「<strong>小标题</strong>：说明」这类富列表项，
-   不会再被 flex 压缩成单字竖排。 */
-.cm-checklist li { position: relative; padding-left: 34px; }
-.cm-checklist li::before {
-  content: ""; position: absolute; left: 0; top: 0.72em;
-  width: 14px; height: 14px; border-radius: 50%;
-  background: var(--cm-accent); transform: translateY(-50%);
+/* 可被 LLM 和用户精确修改的列表结构：icon 是真实 DOM，不再依赖 ::before / list marker。 */
+.cm-checklist li,
+.cm-list-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  column-gap: 16px;
+  min-width: 0;
 }
+.cm-list-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--cm-accent);
+  display: inline-block;
+  margin-top: 0.62em;
+  flex: none;
+}
+.cm-list-body { min-width: 0; }
+.cm-list-body > :first-child { margin-top: 0; }
+.cm-list-body > :last-child { margin-bottom: 0; }
+.cm-checklist li:not(:has(.cm-list-icon)) { display: block; }
 
 /* 间距微调实用类 */
 .cm-mt { margin-top: var(--cm-gap); } .cm-mt-lg { margin-top: var(--cm-gap-lg); }
@@ -936,7 +781,6 @@
 
 /* ---------- 9. 放映（全屏）模式 ---------- */
 .cm-app.is-present .cm-toolbar,
-.cm-app.is-present .cm-story-tools,
 .cm-app.is-present .cm-nav { opacity: 0; pointer-events: none; transition: opacity 0.25s; }
 .cm-app.is-present .cm-stage { background: #000; }
 .cm-app.is-present:hover .cm-nav { opacity: 1; pointer-events: auto; }
@@ -983,78 +827,6 @@
 .cm-confirm p { margin: 0 0 22px; font-size: 15px; line-height: 1.6; }
 .cm-confirm-btns { display: flex; gap: 10px; justify-content: flex-end; }
 
-/* ---------- 11. 微信公众号可见复制区 ---------- */
-.cm-wechat-copy-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 320;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-}
-.cm-wechat-copy-panel {
-  width: min(520px, calc(100vw - 32px));
-  max-height: calc(100vh - 40px);
-  display: flex;
-  flex-direction: column;
-  background: #f7f7f7;
-  border-radius: 12px;
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-}
-.cm-wechat-copy-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  color: #111827;
-  background: #fff;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  font-family: var(--cm-font-sans);
-}
-.cm-wechat-copy-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.cm-wechat-copy-copy {
-  border: 0;
-  border-radius: 7px;
-  background: #111827;
-  color: #fff;
-  cursor: pointer;
-  font: 13px/1 var(--cm-font-sans);
-  padding: 8px 10px;
-}
-.cm-wechat-copy-close {
-  border: 0;
-  background: transparent;
-  color: #4b5563;
-  cursor: pointer;
-  font-size: 22px;
-  line-height: 1;
-}
-.cm-wechat-copy-tip {
-  flex: none;
-  margin: 0;
-  padding: 10px 14px;
-  color: #4b5563;
-  font: 13px/1.5 var(--cm-font-sans);
-  background: #f3f4f6;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-}
-.cm-wechat-copy-area {
-  flex: 1 1 auto;
-  min-height: 360px;
-  overflow: auto;
-  padding: 18px;
-  background: #fff;
-  outline: none;
-  user-select: text;
-  -webkit-user-select: text;
-}
 
 /* ---------- 11. 提示 toast ---------- */
 .cm-toast {

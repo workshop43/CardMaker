@@ -12,7 +12,6 @@
     xiaohongshu: { w: 1080, h: 1440 },
     square: { w: 1080, h: 1080 },
     ppt: { w: 1280, h: 720 },
-    story: { w: 430, h: 932 },
   };
   // data-font 中文字体：优先系统字体栈；只有 css 非空的字体才按需懒加载。
   var FONTS = {
@@ -183,12 +182,12 @@
     this.btnNext.disabled = this.index >= this.cards.length - 1;
   };
 
-  // 等比缩放：普通 deck 按画布完整适配；公众号长文只按宽度适配，允许纵向滚动阅读。
+  // 等比缩放：按画布完整适配到当前舞台。
   Viewer.prototype._fit = function () {
     var p = PRESETS[this.preset];
     var aw = this.stage.clientWidth - 48, ah = this.stage.clientHeight - 48;
     if (aw <= 0 || ah <= 0) return;
-    var scale = this.preset === "story" ? Math.min(1, aw / p.w) : Math.min(aw / p.w, ah / p.h);
+    var scale = Math.min(aw / p.w, ah / p.h);
     this.scaler.style.transform = "scale(" + scale + ")";
   };
 

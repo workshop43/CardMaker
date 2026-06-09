@@ -20,7 +20,6 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     xiaohongshu: { w: 1080, h: 1440, label: "小红书 3:4" },
     square: { w: 1080, h: 1080, label: "方形 1:1" },
     ppt: { w: 1280, h: 720, label: "PPT 16:9" },
-    story: { w: 430, h: 932, label: "微信公众号排版" },
   };
   var BUILTIN_EXAMPLE_TITLES = {
     "3个写作习惯": true,
@@ -71,7 +70,6 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     jszip: "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
   };
   var EXPORT_TEXT_SCALE = 0.95;
-  var WECHAT_TEXT_SCALE = 1.08;
 
   // CodeMirror 5（编辑器，打开编辑面板时才懒加载；失败则退回 textarea）
   var CM_VER = "5.65.16";
@@ -267,27 +265,6 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var stage = el("div", "cm-stage");
     this.scaler = el("div", "cm-scaler");
     this.cardsWrap = el("div", "cm-cards");
-    if (!this.view) {
-      this.storyTools = el("div", "cm-story-tools");
-      this.storyThemeToggle = el("div", "cm-story-theme-toggle");
-      this.btnStoryLight = el("button", "cm-story-theme-btn", "Light");
-      this.btnStoryDark = el("button", "cm-story-theme-btn", "Dark");
-      this.storyThemeToggle.appendChild(this.btnStoryLight);
-      this.storyThemeToggle.appendChild(this.btnStoryDark);
-      this.storyTitle = el("div", "cm-story-title");
-      this.storyTitleText = el("span", "cm-story-title-text", "");
-      this.btnStoryCopyTitle = el("button", "cm-story-title-copy", "复制标题");
-      this.storyTitle.appendChild(this.storyTitleText);
-      this.storyTitle.appendChild(this.btnStoryCopyTitle);
-      this.scaler.appendChild(this.storyTitle);
-      this.btnWechat = el("button", "cm-btn cm-primary", "复制公众号 HTML");
-      this.btnWechatBuffer = el("button", "cm-btn", "复制区");
-      this.btnWechatBuffer.hidden = true;
-      this.storyTools.appendChild(this.storyThemeToggle);
-      this.storyTools.appendChild(this.btnWechat);
-      this.storyTools.appendChild(this.btnWechatBuffer);
-      stage.appendChild(this.storyTools);
-    }
     this.scaler.appendChild(this.cardsWrap);
     stage.appendChild(this.scaler);
 
@@ -331,11 +308,6 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.btnImport.onclick = function () { self.fileImport.click(); };
     this.fileImport.onchange = function () { self._handleImportFile(self.fileImport.files && self.fileImport.files[0]); };
     this.btnSave.onclick = function () { self.downloadHTML(); };
-    if (this.btnWechat) this.btnWechat.onclick = function () { self.copyWeChatHTML(); };
-    if (this.btnWechatBuffer) this.btnWechatBuffer.onclick = function () { self.openWeChatCopyBuffer(); };
-    if (this.btnStoryCopyTitle) this.btnStoryCopyTitle.onclick = function () { self.copyStoryTitle(); };
-    if (this.btnStoryLight) this.btnStoryLight.onclick = function () { self.setStoryTheme("light"); };
-    if (this.btnStoryDark) this.btnStoryDark.onclick = function () { self.setStoryTheme("dark"); };
     this.textarea.addEventListener("input", function () { self._applyEditor(); });
     this._updatePresetTools();
   };
@@ -497,466 +469,10 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     return true;
   };
 
-  // 复制公众号可识别的 HTML：去掉运行时 class / script / 外链 CSS，把当前 deck 的可见内容转成内联样式。
-  CardMaker.prototype.copyWeChatHTML = function () {
-    var html = this.getWeChatHTML();
-    var self = this;
-    if (!html) { flashButton(this.btnWechat, "无内容"); return; }
-    if (copyHTMLWithCopyEvent(html) || copyRichHTMLFromDOM(html)) {
-      flashButton(this.btnWechat, "已复制");
-      return;
-    }
-    copyClipboardHTML(html).then(function (ok) {
-      if (ok) flashButton(self.btnWechat, "已复制");
-      else {
-        copyPlainText(html);
-        flashButton(self.btnWechat, "已复制源码");
-      }
-    });
-  };
-
-  CardMaker.prototype.openWeChatCopyBuffer = function () {
-    var html = this.getWeChatHTML();
-    if (!html) { this._toast("没有可复制的内容"); return; }
-    showWeChatCopyBuffer(html);
-  };
-
-  // 输出适合粘贴到微信公众号编辑器的 HTML 片段。
-  CardMaker.prototype.getWeChatHTML = function () {
-    if (!this.cards || !this.cards.length) return "";
-    var restoreThemes = [];
-    try {
-      // dark/light 只是公众号预览态；复制到公众号时按 light 正文环境计算样式，避免把 dark 白字暗底内联出去。
-      this.cards.forEach(function (card) {
-        restoreThemes.push({ card: card, theme: card.getAttribute("data-theme") });
-        card.setAttribute("data-theme", "light");
-      });
-      var parts = [];
-      this.cards.forEach(function (card, i) {
-        var main = card.querySelector(".cm-main") || card;
-        var wrap = document.createElement("section");
-        var cardCS = getComputedStyle(card);
-        wrap.setAttribute("style", [
-          "box-sizing:border-box",
-          "display:block",
-          "margin:" + (i ? "22px 0 0" : "0"),
-          "padding:0",
-          "color:" + safeColor(cardCS.color, "#1f2937"),
-          "font-size:" + scaledWechatFont(px(cardCS.fontSize) || 16) + "px",
-          "line-height:" + lineHeightValue(cardCS),
-          "font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',Arial,sans-serif",
-        ].join(";") + ";");
-        Array.prototype.forEach.call(main.childNodes, function (node) {
-          if (isRuntimeChrome(node)) return;
-          var cloned = cloneWechatNode(node);
-          if (cloned) wrap.appendChild(cloned);
-        });
-        parts.push(wrap.outerHTML);
-      });
-      return '<section style="box-sizing:border-box;display:block;max-width:430px;margin:0 auto;padding:0;color:#1f2937;font-size:16px;line-height:1.8;">' +
-        parts.join("\n") + "</section>";
-    } finally {
-      restoreThemes.forEach(function (item) {
-        if (item.theme == null) item.card.removeAttribute("data-theme");
-        else item.card.setAttribute("data-theme", item.theme);
-      });
-      this._syncStoryThemeTools();
-    }
-  };
-
   // 判断用户上传的是 Markdown 文件；MIME 在不同系统里不稳定，因此以扩展名为主。
   function isMarkdownFile(file) {
     var name = (file && file.name) || "";
     return /\.(md|markdown)$/i.test(name) || /markdown/i.test((file && file.type) || "");
-  }
-
-  function isRuntimeChrome(node) {
-    return node && node.nodeType === 1 && node.matches(".cm-header,.cm-footer,.cm-page,script,style,link");
-  }
-
-  function cloneWechatNode(node) {
-    if (!node) return null;
-    if (node.nodeType === 3) return cloneWechatTextNode(node.textContent || "");
-    if (node.nodeType !== 1 || isRuntimeChrome(node)) return null;
-    var tag = wechatTag(node);
-    var out = document.createElement(tag);
-    var style = wechatStyle(node, tag);
-    if (style) out.setAttribute("style", style);
-    if (node.tagName === "A" && node.getAttribute("href")) out.setAttribute("href", node.getAttribute("href"));
-    if (node.tagName === "IMG" && node.getAttribute("src")) out.setAttribute("src", node.getAttribute("src"));
-    appendWechatChildren(out, node);
-    if (!out.childNodes.length && isDecorationNode(node, tag, getComputedStyle(node))) {
-      out.appendChild(document.createTextNode("\u00a0"));
-    }
-    return out;
-  }
-
-  function appendWechatChildren(out, source) {
-    Array.prototype.forEach.call(source.childNodes, function (child) {
-      var cloned = cloneWechatNode(child);
-      if (!cloned) return;
-      out.appendChild(cloned);
-    });
-  }
-
-  function cloneWechatTextNode(text) {
-    if (!text) return null;
-    if (!text.trim()) return null;
-    var frag = document.createDocumentFragment();
-    var lines = text
-      .replace(/\r\n?/g, "\n")
-      .replace(/^\s*\n+/, "")
-      .replace(/\n+\s*$/, "")
-      .replace(/\n{2,}/g, "\n")
-      .split("\n");
-    lines.forEach(function (line, i) {
-      if (i) frag.appendChild(document.createElement("br"));
-      var cleaned = line.replace(/\s+/g, " ").trim();
-      if (cleaned) frag.appendChild(document.createTextNode(cleaned));
-    });
-    return frag;
-  }
-
-  function wechatTag(node) {
-    var tag = (node.tagName || "div").toLowerCase();
-    if (/^(span|strong|em|b|i|u|a|img|br)$/i.test(tag)) return tag;
-    return "section";
-  }
-
-  function wechatStyle(node, tag) {
-    var cs = getComputedStyle(node);
-    var font = px(cs.fontSize);
-    var styles = [
-      "box-sizing:border-box",
-      "display:" + wechatDisplay(tag, cs),
-      "color:" + safeColor(cs.color, "#1f2937"),
-      "font-size:" + scaledWechatFont(font || 16) + "px",
-      "line-height:" + lineHeightValue(cs),
-      "font-weight:" + cs.fontWeight,
-      "text-align:" + (isDecorationGroup(node) ? "center" : cs.textAlign),
-    ];
-    pushTextStyles(styles, cs);
-    ["marginTop", "marginRight", "marginBottom", "marginLeft", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"].forEach(function (prop) {
-      var value = px(cs[prop]);
-      if (value) styles.push(cssName(prop) + ":" + roundPx(value) + "px");
-    });
-    pushBorderStyles(styles, cs);
-    var radius = px(cs.borderRadius);
-    if (radius) styles.push("border-radius:" + roundPx(radius) + "px");
-    pushPaintStyles(styles, cs);
-    pushDecorationSize(styles, node, tag, cs);
-    if (tag !== "span" && tag !== "strong" && tag !== "em" && tag !== "b" && tag !== "i" && tag !== "u" && tag !== "a") {
-      styles.push("max-width:100%");
-    }
-    if (tag === "img") styles.push("display:block;width:100%;height:auto");
-    return styles.join(";") + ";";
-  }
-
-  function wechatDisplay(tag, cs) {
-    if (tag === "img" || tag === "br") return tag === "img" ? "block" : "inline";
-    if (/^(span|strong|em|b|i|u|a)$/i.test(tag)) {
-      if (/^block$/i.test(cs.display)) return "block";
-      return /inline-block/i.test(cs.display) ? "inline-block" : "inline";
-    }
-    return "block";
-  }
-
-  function pushDecorationSize(styles, node, tag, cs) {
-    if (isDecorationGroup(node)) {
-      styles.push("display:block");
-      styles.push("width:100%");
-      styles.push("text-align:center");
-      return;
-    }
-    if (!isDecorationNode(node, tag, cs)) return;
-    var width = px(cs.width);
-    var height = px(cs.height);
-    if (width) styles.push("width:" + roundPx(width) + "px");
-    if (height) styles.push("height:" + roundPx(height) + "px");
-    if (width || height) {
-      styles.push("display:inline-block");
-      styles.push("vertical-align:middle");
-      styles.push("margin-left:4px");
-      styles.push("margin-right:4px");
-      styles.push("font-size:0");
-      styles.push("line-height:0");
-    }
-    if (isDecorationGroup(node)) styles.push("text-align:center");
-  }
-
-  function isDecorationNode(node, tag, cs) {
-    if (!node || node.nodeType !== 1 || String(node.textContent || "").trim()) return false;
-    var bg = safeColor(cs.backgroundColor, "");
-    var border = px(cs.borderTopWidth) || px(cs.borderRightWidth) || px(cs.borderBottomWidth) || px(cs.borderLeftWidth);
-    var sized = px(cs.width) || px(cs.height);
-    return !!(bg || border || sized || /^(span|section)$/i.test(tag));
-  }
-
-  function isDecorationGroup(node) {
-    if (!node || node.nodeType !== 1 || String(node.textContent || "").trim()) return false;
-    var children = Array.prototype.filter.call(node.childNodes || [], function (child) {
-      return child.nodeType === 1 && !String(child.textContent || "").trim();
-    });
-    return children.length >= 2;
-  }
-
-  function pushTextStyles(styles, cs) {
-    if (cs.fontStyle && cs.fontStyle !== "normal") styles.push("font-style:" + cs.fontStyle);
-    if (cs.letterSpacing && cs.letterSpacing !== "normal") styles.push("letter-spacing:" + cs.letterSpacing);
-    if (cs.textDecorationLine && cs.textDecorationLine !== "none") styles.push("text-decoration:" + cs.textDecorationLine);
-    if (cs.whiteSpace && cs.whiteSpace !== "normal") styles.push("white-space:" + cs.whiteSpace);
-    if (cs.verticalAlign && cs.verticalAlign !== "baseline") styles.push("vertical-align:" + cs.verticalAlign);
-  }
-
-  function pushBorderStyles(styles, cs) {
-    var sides = ["Top", "Right", "Bottom", "Left"];
-    sides.forEach(function (side) {
-      var width = px(cs["border" + side + "Width"]);
-      var style = cs["border" + side + "Style"];
-      if (width && style !== "none") {
-        var prefix = "border-" + side.toLowerCase();
-        var color = safeColor(cs["border" + side + "Color"], "#e5e7eb");
-        styles.push(prefix + "-width:" + roundPx(width) + "px");
-        styles.push(prefix + "-style:" + style);
-        styles.push(prefix + "-color:" + color);
-      }
-    });
-  }
-
-  function pushPaintStyles(styles, cs) {
-    var bg = safeColor(cs.backgroundColor, "");
-    if (bg) {
-      styles.push("background:" + bg);
-      styles.push("background-color:" + bg);
-    }
-    var opacity = parseFloat(cs.opacity);
-    if (isFinite(opacity) && opacity < 1) styles.push("opacity:" + opacity);
-  }
-
-  function copyPlainText(text) {
-    var ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand("copy"); } catch (e) { /* ignore */ }
-    ta.remove();
-  }
-
-  function flashButton(button, text) {
-    if (!button) return;
-    var original = button.textContent;
-    button.textContent = text;
-    button.disabled = true;
-    clearTimeout(button.__cmFlashTimer);
-    button.__cmFlashTimer = setTimeout(function () {
-      button.textContent = original;
-      button.disabled = false;
-    }, 1400);
-  }
-
-  function copyHTMLWithCopyEvent(html) {
-    var marker = document.createElement("span");
-    marker.textContent = " ";
-    marker.style.cssText = "position:fixed;left:0;top:0;opacity:0;user-select:text;-webkit-user-select:text;";
-    document.body.appendChild(marker);
-    var sel = window.getSelection && window.getSelection();
-    var range = document.createRange();
-    var copied = false;
-    function onCopy(e) {
-      e.preventDefault();
-      if (!e.clipboardData) return;
-      e.clipboardData.setData("text/html", html);
-      e.clipboardData.setData("text/plain", htmlToPlainText(html));
-      copied = true;
-    }
-    document.addEventListener("copy", onCopy, true);
-    try {
-      range.selectNodeContents(marker);
-      if (sel) {
-        sel.removeAllRanges();
-        sel.addRange(range);
-      }
-      document.execCommand("copy");
-    } catch (e) {
-      copied = false;
-    }
-    document.removeEventListener("copy", onCopy, true);
-    if (sel) sel.removeAllRanges();
-    marker.remove();
-    return copied;
-  }
-
-  // 公众号编辑器对“从真实页面选中后复制”的富文本兼容性通常好于 ClipboardItem 写入的字符串。
-  function copyRichHTMLFromDOM(html) {
-    var host = document.createElement("div");
-    host.contentEditable = "true";
-    host.setAttribute("aria-hidden", "true");
-    host.style.cssText = [
-      "position:fixed",
-      "left:-100000px",
-      "top:0",
-      "width:430px",
-      "height:auto",
-      "overflow:visible",
-      "background:#fff",
-      "color:#1f2937",
-      "z-index:-1",
-      "pointer-events:none",
-      "user-select:text",
-      "-webkit-user-select:text",
-    ].join(";");
-    host.innerHTML = html;
-    document.body.appendChild(host);
-    var sel = window.getSelection && window.getSelection();
-    var range = document.createRange();
-    var ok = false;
-    try {
-      range.selectNodeContents(host);
-      if (sel) {
-        sel.removeAllRanges();
-        sel.addRange(range);
-      }
-      ok = document.execCommand("copy");
-    } catch (e) {
-      ok = false;
-    }
-    if (sel) sel.removeAllRanges();
-    host.remove();
-    return ok;
-  }
-
-  function copyClipboardHTML(html) {
-    if (!navigator.clipboard || !window.ClipboardItem) return Promise.resolve(false);
-    var item = new ClipboardItem({
-      "text/html": new Blob([html], { type: "text/html" }),
-      "text/plain": new Blob([html], { type: "text/plain" }),
-    });
-    return navigator.clipboard.write([item]).then(function () {
-      return true;
-    }).catch(function () {
-      return false;
-    });
-  }
-
-  function showWeChatCopyBuffer(html) {
-    var mask = el("div", "cm-wechat-copy-mask");
-    var panel = el("div", "cm-wechat-copy-panel");
-    var head = el("div", "cm-wechat-copy-head");
-    head.innerHTML = '<strong>公众号复制区</strong><div class="cm-wechat-copy-actions"><button type="button" class="cm-wechat-copy-copy">复制此内容</button><button type="button" class="cm-wechat-copy-close">×</button></div>';
-    var tip = el("p", "cm-wechat-copy-tip", "优先点击「复制此内容」后粘贴到公众号编辑器；也可以在下方正文区域内手动 Cmd/Ctrl+A、Cmd/Ctrl+C。");
-    var area = el("div", "cm-wechat-copy-area");
-    area.contentEditable = "true";
-    area.innerHTML = html;
-    panel.appendChild(head);
-    panel.appendChild(tip);
-    panel.appendChild(area);
-    mask.appendChild(panel);
-    document.body.appendChild(mask);
-    function close() { mask.remove(); }
-    head.querySelector(".cm-wechat-copy-close").onclick = close;
-    head.querySelector(".cm-wechat-copy-copy").onclick = function () {
-      var current = area.innerHTML;
-      if (copyHTMLWithCopyEvent(current) || copyRichHTMLFromDOM(current)) {
-        showInlineCopyTip(tip, "已复制。现在粘贴到公众号编辑器。");
-        return;
-      }
-      copyClipboardHTML(current).then(function (ok) {
-        showInlineCopyTip(tip, ok ? "已复制。现在粘贴到公众号编辑器。" : "复制失败，请手动选择下方正文复制。");
-      });
-    };
-    mask.addEventListener("click", function (e) { if (e.target === mask) close(); });
-    setTimeout(function () {
-      area.focus();
-      selectNodeContents(area);
-    }, 0);
-  }
-
-  function showInlineCopyTip(node, text) {
-    node.textContent = text;
-  }
-
-  function selectNodeContents(node) {
-    var sel = window.getSelection && window.getSelection();
-    if (!sel) return;
-    var range = document.createRange();
-    range.selectNodeContents(node);
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }
-
-  function htmlToPlainText(html) {
-    var tmp = document.createElement("div");
-    tmp.innerHTML = html;
-    return tmp.textContent || "";
-  }
-
-  function cssName(prop) {
-    return prop.replace(/[A-Z]/g, function (m) { return "-" + m.toLowerCase(); });
-  }
-
-  function safeColor(value, fallback) {
-    var color = normalizeWechatColor(value);
-    return color || fallback;
-  }
-
-  function normalizeWechatColor(value) {
-    if (!value || value === "transparent" || /rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/i.test(value)) return "";
-    var text = String(value).trim();
-    var rgb = text.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/i);
-    if (rgb) return colorFromChannels(rgb[1], rgb[2], rgb[3], rgb[4]);
-    var srgb = text.match(/^color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)$/i);
-    if (srgb) return colorFromChannels(srgb[1] * 255, srgb[2] * 255, srgb[3] * 255, srgb[4]);
-    var hex = text.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
-    if (hex) return expandHex(text);
-    return "";
-  }
-
-  function colorFromChannels(r, g, b, a) {
-    var alpha = a == null || a === "" ? 1 : Math.max(0, Math.min(1, parseFloat(a)));
-    var rr = clampColor(r), gg = clampColor(g), bb = clampColor(b);
-    if (alpha < 0.98) return "rgba(" + rr + "," + gg + "," + bb + "," + roundUnit(alpha) + ")";
-    return "#" + hex2(rr) + hex2(gg) + hex2(bb);
-  }
-
-  function clampColor(value) {
-    var n = Math.round(parseFloat(value));
-    return Math.max(0, Math.min(255, isFinite(n) ? n : 0));
-  }
-
-  function hex2(value) {
-    return ("0" + value.toString(16)).slice(-2);
-  }
-
-  function expandHex(value) {
-    var hex = value.toLowerCase();
-    if (hex.length === 4) return "#" + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
-    return hex;
-  }
-
-  function px(value) {
-    var n = parseFloat(value);
-    return isFinite(n) ? n : 0;
-  }
-
-  function roundPx(value) {
-    return Math.round(value * 10) / 10;
-  }
-
-  function scaledWechatFont(value) {
-    return roundPx(value * WECHAT_TEXT_SCALE);
-  }
-
-  function lineHeightValue(cs) {
-    var font = px(cs.fontSize) || 16;
-    var line = px(cs.lineHeight);
-    if (line && font) return roundUnit(line / font);
-    return cs.lineHeight && cs.lineHeight !== "normal" ? cs.lineHeight : "1.75";
-  }
-
-  function roundUnit(value) {
-    return Math.round(value * 100) / 100;
   }
 
   // 保存为自包含 HTML 文件：同源的 cardmaker.css/js 内联进去，双击即可打开、再编辑、再出图
@@ -1075,8 +591,6 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.counter.textContent = this.cards.length ? this.index + 1 + " / " + this.cards.length : "0";
     this.btnPrev.disabled = this.index <= 0;
     this.btnNext.disabled = this.index >= this.cards.length - 1;
-    this._syncStoryThemeTools();
-    this._syncStoryTitle();
   };
 
   // 等比缩放，让当前卡片铺满舞台
@@ -1085,7 +599,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     var availW = this.stage.clientWidth - 48;
     var availH = this.stage.clientHeight - 48;
     if (availW <= 0 || availH <= 0) return;
-    var scale = this.preset === "story" ? Math.min(1, availW / p.w) : Math.min(availW / p.w, availH / p.h);
+    var scale = Math.min(availW / p.w, availH / p.h);
     this.scaler.style.transform = "scale(" + scale + ")";
   };
 
@@ -1374,7 +888,6 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
 
   // 导出文件名使用当前内容标题，而不是浏览器 document.title 或旧的 deck 元信息。
   function exportContentTitle(app) {
-    if (app && app.preset === "story" && app.title && String(app.title).trim()) return compactTitle(app.title);
     var card = app && app.cards && app.cards.length ? app.cards[0] : null;
     var titleEl = card && card.querySelector("h1,h2,.cm-display,.cm-title,.cm-titlebar");
     var fromContent = titleEl ? compactTitle(titleEl.textContent) : "";
@@ -1485,39 +998,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   };
 
   CardMaker.prototype._updatePresetTools = function () {
-    if (this.btnWechat) this.btnWechat.hidden = this.preset !== "story";
-    if (this.storyTools) this.storyTools.hidden = this.preset !== "story";
-    this._syncStoryThemeTools();
-    this._syncStoryTitle();
-  };
-
-  CardMaker.prototype.setStoryTheme = function (theme) {
-    theme = theme === "dark" ? "dark" : "light";
-    var cards = this.cards && this.cards.length ? this.cards : Array.prototype.slice.call(this.cardsWrap.querySelectorAll(".card"));
-    cards.forEach(function (card) { card.setAttribute("data-theme", theme); });
-    this._syncStoryThemeTools();
-  };
-
-  CardMaker.prototype._syncStoryThemeTools = function () {
-    if (!this.btnStoryLight || !this.btnStoryDark) return;
-    var card = this.cards && this.cards[this.index] ? this.cards[this.index] : null;
-    var theme = card && card.getAttribute("data-theme") === "dark" ? "dark" : "light";
-    this.btnStoryLight.classList.toggle("is-active", theme === "light");
-    this.btnStoryDark.classList.toggle("is-active", theme === "dark");
-    if (this.storyTitle) this.storyTitle.setAttribute("data-theme", theme);
-  };
-
-  CardMaker.prototype._syncStoryTitle = function () {
-    if (!this.storyTitleText || !this.storyTitle) return;
-    var hasTitle = !!String(this.title || "").trim();
-    var hasCards = !!(this.cards && this.cards.length);
-    this.storyTitle.hidden = this.preset !== "story" || !hasTitle || !hasCards;
-    this.storyTitleText.textContent = hasTitle ? this.title : "";
-  };
-
-  CardMaker.prototype.copyStoryTitle = function () {
-    copyPlainText(this.title || "");
-    flashButton(this.btnStoryCopyTitle, "已复制");
+    // 预设专属工具入口已移除；保留空方法兼容现有调用点。
   };
 
   // 切到某比例并载入其示例（示例独立存放在 examples/<preset>.html，按需 fetch 注入）

@@ -32,7 +32,7 @@
 ## 硬规则（只有这几条）
 
 1. 每页是一个 `<section class="card">`；卡片前可放**一个** `<style>` 作为你的设计系统。**禁止** `<html>/<head>/<body>`、代码围栏、解释文字（除非要求整份文件）。
-2. 比例由 `data-preset` 决定：`xiaohongshu`(3:4) `square`(1:1) `ppt`(16:9) `story`(9:16)。画布固定，按尺寸设计。
+2. 比例由 `data-preset` 决定：`xiaohongshu`(3:4) `square`(1:1) `ppt`(16:9)。画布固定，按尺寸设计。
 3. **禁止** `<script>`、外链图片/字体/CSS。换字体用 `data-font`（运行时安全加载、导出嵌入）。
 4. CSS 选择器随你写（`.card .x`、`.card > .x`、给元素直接加 class 都行）——内容就渲染在 `.card` 里，没有额外包裹层。
 
@@ -123,9 +123,16 @@
 
 `--cm-fg` 文字 · `--cm-bg`/`--cm-card-bg` 背景 · `--cm-accent` 强调(其上文字 `--cm-accent-fg`) · `--cm-muted` 次要 · `--cm-line` 描边；字阶 `--cm-h1`/`--cm-h2`/`--cm-h3`/`--cm-text`；间距 `--cm-pad`/`--cm-gap`。
 
-**现成零件**（想用就用）：眉题 `cm-kicker` · 巨标题 `cm-display` · 导语 `cm-lead` · 强调条 `cm-bar` · 大序号 `cm-num` · 水印序号 `cm-watermark` · 标签 `cm-tag`/`cm-chip` · 分隔线 `cm-divider` · 署名行 `cm-footer` · `<strong>` 自动用强调色。
+**现成零件**（想用就用）：眉题 `cm-kicker` · 巨标题 `cm-display` · 导语 `cm-lead` · 强调条 `cm-bar` · 大序号 `cm-num` · 水印序号 `cm-watermark` · 标签 `cm-tag`/`cm-chip` · 清单 `cm-checklist` + `cm-list-icon` + `cm-list-body` · 分隔线 `cm-divider` · 署名行 `cm-footer` · `<strong>` 自动用强调色。
 **布局类**：`cm-middle` 垂直居中 · `cm-top` 顶对齐 · `cm-text-center` · `cm-row` 横排 · `cm-col` 竖排 · `cm-items-center` · `cm-between` · `cm-fill` 占满剩余 · `cm-mt`/`cm-mt-lg` 间距。
 **装饰层**（自动垫在内容之下，不挡字）：`<div class="cm-deco cm-deco-glow"></div>`，可选 `cm-deco-blob`/`cm-deco-grid`/`cm-deco-dots`/`cm-deco-ring`。
+
+关键视觉对象必须是真实 DOM：icon、圆点、编号、分隔符、徽标不要用 `::before`、`::after` 或 `list-style` 承载。清单写成：
+```html
+<ul class="cm-checklist">
+  <li><span class="cm-list-icon"></span><span class="cm-list-body"><strong>要点</strong><br />说明文字</span></li>
+</ul>
+```
 
 ## 版式原型（抽象模板，替换所有占位内容）
 
