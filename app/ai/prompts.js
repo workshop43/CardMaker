@@ -104,7 +104,8 @@ const OVERFLOW_POLICY = [
   "- 输出前必须用上下文里的 layout_metrics 判断正文显示区，而不是只按整页画布估算。",
   "- 检查 .cm-main：内容高度不能超过 client_height，也不要贴近底部；应保留可感知的安全余量。",
   "- 检查正文里的容器、卡块、分栏、网格、callout、band、feature row：文字不能溢出容器，也不要贴近容器边界。",
-  "- 如果正文区或局部容器有溢出/贴边风险，自行选择更适合的版式，或降低 font-size、line-height、gap、padding，或减少列数/改变分栏比例。",
+  "- 检查 layout_metrics.pages[].overlaps：任何独立正文块、卡片、列表、强调块、分栏之间都不能发生视觉重叠。",
+  "- 如果正文区或局部容器有溢出/贴边/重叠风险，自行选择更适合的版式，或降低 font-size、line-height、gap、padding，或减少列数/改变分栏比例。",
   "- 允许用公共组件，也允许自行设计 DOM 结构；最终结果必须完整落在正文显示区和各自容器内。",
 ].join("\n");
 
@@ -321,6 +322,7 @@ export function deckPatchPrompt(context, feedback) {
     '  "style": "完整 <style>...</style>；不修改全局样式则为空字符串",',
     '  "pages": {"1": "完整 <section class=\\"card\\">...</section>，只放被替换的页"},',
     '  "insert_pages": [{"after": 11, "page": {"role":"content","title":"标题","subtitle":"","content":[{"heading":"","text":""}]}, "html": "完整 <section class=\\"card\\">...</section>"}],',
+    '  "move_pages": [{"pages": [16], "after": "last 或 1-based 页码；0 表示移到最前"}],',
     '  "delete_pages": [3],',
     '  "plan": null 或完整 plan JSON',
     "}",
@@ -329,6 +331,7 @@ export function deckPatchPrompt(context, feedback) {
     "- 所有页码使用 1-based 页码；after=0 表示插入到最前面。",
     "- pages 里每个值必须是可直接替换该页的完整 <section class=\"card\">。",
     "- insert_pages[].html 必须是完整 <section class=\"card\">；insert_pages[].page 用于同步大纲，可给出简洁页面规格。",
+    "- move_pages 用于调整已有页顺序；移动页面时不要用 pages 重写这些页，也不要用 delete_pages + insert_pages 复制页面。",
     "- style 若返回，必须是完整 deck 级 <style>，不要把 class 级样式散落到每页重复写。",
     "- 不相关页面不要放进 pages，避免误改内容。",
     "- 用户未要求重写内容时，保留原有正文语义和事实，不要为了排版改写整套内容。",
@@ -338,7 +341,6 @@ export function deckPatchPrompt(context, feedback) {
     "",
     STYLE_POLICY,
     OVERFLOW_POLICY,
-    contextBlock(context),
   ].join("\n");
   const user = [
     "用户需求：\n" + feedback,

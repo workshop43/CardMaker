@@ -2,7 +2,7 @@
 
 # CardMaker
 
-**用 HTML 设计卡片，像 PPT 一样放映，一键导出高清图片。**
+**用 HTML 设计卡片，像 PPT 一样放映，一键导出高清图片和 PDF。**
 
 纯静态 · 零构建 · LLM 友好
 
@@ -16,7 +16,7 @@ CardMaker 是一个轻量的卡片设计运行时。你（或 LLM）用 HTML/CSS
 
 - 📐 **固定比例画布** — 小红书 3:4、方形 1:1、PPT 16:9，原生像素渲染
 - 🎬 **放映** — 翻页、键盘控制、全屏，像演示一样展示
-- 🖼️ **一键出图** — 单张 / 批量打包，导出 2x 高清 PNG（基于 [html-to-image](https://github.com/bubkoo/html-to-image)）
+- 🖼️ **一键出图** — 单张 / 批量打包，导出 2x 高清 PNG；也可整套导出 PDF（基于 [html-to-image](https://github.com/bubkoo/html-to-image) / JSZip / jsPDF）
 - 💾 **存档不丢** — 自动存本地，刷新自动恢复；「导出 HTML」可导出**自包含的单文件 deck**（运行时内联），双击即开放映、可分享；回到 CardMaker 点「导入 HTML」可导入再编辑
 - 🤖 **为 AI 而生** — 把 [`PROMPT.md`](./PROMPT.md) 喂给 LLM，它就能直接产出整个 deck
 
@@ -151,7 +151,7 @@ python3 -m http.server 8765
 ## 工作原理
 
 - 卡片用**原生像素尺寸**渲染，屏幕上靠父层 `transform: scale` 等比缩放——所以导出时按原生分辨率栅格化，保证高清。
-- 出图依赖（html-to-image / JSZip）在你点导出时才从 CDN 懒加载，平时零负担。
+- 出图依赖（html-to-image / JSZip / jsPDF）在你点导出时才从 CDN 懒加载，平时零负担。
 - 默认系统字体栈，规避跨域 web 字体导出失败的坑。
 
 ## License

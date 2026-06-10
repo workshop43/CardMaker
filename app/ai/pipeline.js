@@ -109,9 +109,10 @@ function normalizeDeckPatch(patch) {
   const deletePages = Array.isArray(patch.delete_pages)
     ? Array.from(new Set(patch.delete_pages.map((n) => parseInt(n, 10)).filter((n) => n > 0)))
     : [];
+  const movePages = Array.isArray(patch.move_pages) ? patch.move_pages.map(normalizeMovePageOp).filter(Boolean) : [];
   const style = normalizePatchStyle(patch.style);
   const plan = patch.plan && typeof patch.plan === "object" && Array.isArray(patch.plan.pages) ? patch.plan : null;
-  if (!style && !Object.keys(pages).length && !insertPages.length && !deletePages.length && !plan) {
+  if (!style && !Object.keys(pages).length && !insertPages.length && !deletePages.length && !movePages.length) {
     throw new Error("Deck patch 没有可执行修改。");
   }
   return {
@@ -119,9 +120,20 @@ function normalizeDeckPatch(patch) {
     style,
     pages,
     insert_pages: insertPages,
+    move_pages: movePages,
     delete_pages: deletePages,
     plan,
   };
+}
+
+function normalizeMovePageOp(op) {
+  if (!op || typeof op !== "object") return null;
+  const pages = Array.isArray(op.pages) ? op.pages : [op.page];
+  const cleanPages = Array.from(new Set(pages.map((n) => parseInt(n, 10)).filter((n) => n > 0)));
+  if (!cleanPages.length) return null;
+  const rawAfter = op.after == null ? "last" : op.after;
+  const after = /^(last|end)$/i.test(String(rawAfter)) ? "last" : Math.max(0, parseInt(rawAfter, 10) || 0);
+  return { pages: cleanPages, after };
 }
 
 function normalizePatchStyle(style) {

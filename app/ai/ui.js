@@ -410,6 +410,7 @@ async function runDeckPatch(app, cfg, feedback) {
       console.info("[CardMaker AI] deck patch repair", { repair, report });
       const repairResult = applyDeckPatch(app, repair);
       result.changedPages = Array.from(new Set(result.changedPages.concat(repairResult.changedPages))).sort((a, b) => a - b);
+      result.movedPages = Array.from(new Set((result.movedPages || []).concat(repairResult.movedPages || []))).sort((a, b) => a - b);
       result.insertedPages += repairResult.insertedPages;
       result.deletedPages += repairResult.deletedPages;
       result.styleChanged = result.styleChanged || repairResult.styleChanged;
@@ -451,9 +452,7 @@ function deckPatchContext(app, purpose) {
 // 应用模型返回的统一 patch。这里只做结构边界和危险标签处理，不替模型做意图过滤。
 function applyDeckPatch(app, patch) {
   if (!S || !S.sections) throw new Error("当前 deck 会话不存在。");
-  const result = { changedPages: [], insertedPages: 0, deletedPages: 0, styleChanged: false, reason: patch.reason || "" };
-  const totalBefore = S.sections.length;
-  const focus = { sourceIdx: -1 };
+  const result = { changedPages: [], insertedPages: 0, deletedPages: 0, movedPages: [], styleChanged: false, reason: patch.reason || "" };
   if (patch.style) {
     S.designStyle = patch.style;
     result.styleChanged = true;
@@ -463,40 +462,95 @@ function applyDeckPatch(app, patch) {
   if (patch.plan) S.plan = patch.plan;
   ensurePlanShape();
 
-  const deletes = (patch.delete_pages || [])
-    .map((n) => parseInt(n, 10) - 1)
-    .filter((idx) => idx >= 0 && idx < S.sections.length)
-    .sort((a, b) => b - a);
-  deletes.forEach((idx) => {
-    S.sections.splice(idx, 1);
-    if (S.plan && Array.isArray(S.plan.pages)) S.plan.pages.splice(idx, 1);
+  const original = S.sections.map((section, i) => ({
+    originalPage: i + 1,
+    section,
+    planPage: S.plan && Array.isArray(S.plan.pages) ? S.plan.pages[i] : null,
+    deleted: false,
+  }));
+  let focusFinalIdx = -1;
+  Object.entries(patch.pages || {}).forEach(([page, html]) => {
+    const idx = parseInt(page, 10) - 1;
+    if (idx < 0 || idx >= original.length || !html) return;
+    original[idx].section = html;
+    result.changedPages.push(idx + 1);
+  });
+
+  const deleteSet = new Set((patch.delete_pages || [])
+    .map((n) => parseInt(n, 10))
+    .filter((page) => page >= 1 && page <= original.length));
+  original.forEach((item) => {
+    if (!deleteSet.has(item.originalPage)) return;
+    item.deleted = true;
     result.deletedPages++;
   });
 
-  Object.entries(patch.pages || {}).forEach(([page, html]) => {
-    const idx = parseInt(page, 10) - 1;
-    if (idx < 0 || idx >= S.sections.length || !html) return;
-    S.sections[idx] = html;
-    result.changedPages.push(idx + 1);
-    if (focus.sourceIdx < 0) focus.sourceIdx = idx;
+  let finalItems = original
+    .filter((item) => !item.deleted)
+    .map((item) => ({ section: item.section, planPage: item.planPage, originalPage: item.originalPage, inserted: false }));
+
+  (patch.move_pages || []).forEach((move) => {
+    const moved = moveExistingPages(finalItems, move);
+    if (!moved.pages.length) return;
+    finalItems = moved.items;
+    result.movedPages = result.movedPages.concat(moved.pages);
+    if (focusFinalIdx < 0) focusFinalIdx = moved.focusIdx;
   });
 
   const inserts = (patch.insert_pages || []).slice().sort((a, b) => a.after - b.after);
+  let insertedSoFar = 0;
   inserts.forEach((item) => {
-    const idx = Math.max(0, Math.min(S.sections.length, parseInt(item.after, 10) || 0));
-    S.sections.splice(idx, 0, item.html);
-    if (S.plan && Array.isArray(S.plan.pages)) S.plan.pages.splice(idx, 0, normalizeInsertedPageSpec(item.page, idx));
+    const after = Math.max(0, Math.min(original.length, parseInt(item.after, 10) || 0));
+    const survivingBefore = original.filter((entry) => !entry.deleted && entry.originalPage <= after).length;
+    const idx = Math.max(0, Math.min(finalItems.length, survivingBefore + insertedSoFar));
+    finalItems.splice(idx, 0, {
+      section: item.html,
+      planPage: normalizeInsertedPageSpec(item.page, item.html, idx),
+      originalPage: null,
+      inserted: true,
+    });
     result.insertedPages++;
     result.changedPages.push(idx + 1);
-    if (focus.sourceIdx < 0) focus.sourceIdx = idx;
+    if (focusFinalIdx < 0) focusFinalIdx = idx;
+    insertedSoFar++;
   });
 
-  if (patch.plan && Array.isArray(patch.plan.pages) && patch.plan.pages.length !== S.sections.length) {
-    S.plan.pages = S.sections.map((section, i) => (patch.plan.pages && patch.plan.pages[i]) || sectionToPageSpec(section, i));
+  if (focusFinalIdx < 0 && result.changedPages.length) {
+    const firstChangedOriginal = result.changedPages[0];
+    focusFinalIdx = finalItems.findIndex((item) => item.originalPage === firstChangedOriginal);
   }
+
+  S.sections = finalItems.map((item) => item.section);
+  S.plan.pages = finalItems.map((item, i) => item.planPage || sectionToPageSpec(item.section, i));
   renumberSessionSections();
-  applySections(app, focus.sourceIdx >= 0 ? focus.sourceIdx : Math.max(0, Math.min(S.sections.length - 1, totalBefore - 1)));
+  applySections(app, focusFinalIdx >= 0 ? focusFinalIdx : Math.max(0, S.sections.length - 1));
   return result;
+}
+
+function moveExistingPages(items, move) {
+  const pageSet = new Set((move.pages || []).map((n) => parseInt(n, 10)).filter(Boolean));
+  if (!pageSet.size) return { items, pages: [], focusIdx: -1 };
+  const moving = [];
+  const rest = [];
+  items.forEach((item) => {
+    if (item.originalPage && pageSet.has(item.originalPage)) moving.push(item);
+    else rest.push(item);
+  });
+  if (!moving.length) return { items, pages: [], focusIdx: -1 };
+  const idx = moveInsertIndex(rest, move.after);
+  rest.splice(idx, 0, ...moving);
+  return { items: rest, pages: moving.map((item) => item.originalPage), focusIdx: idx };
+}
+
+function moveInsertIndex(items, after) {
+  if (/^(last|end)$/i.test(String(after))) return items.length;
+  const page = Math.max(0, parseInt(after, 10) || 0);
+  if (page <= 0) return 0;
+  let idx = 0;
+  items.forEach((item, i) => {
+    if (item.originalPage && item.originalPage <= page) idx = i + 1;
+  });
+  return Math.max(0, Math.min(items.length, idx));
 }
 
 function ensurePlanShape() {
@@ -509,7 +563,7 @@ function ensurePlanShape() {
   }
 }
 
-function normalizeInsertedPageSpec(page, idx) {
+function normalizeInsertedPageSpec(page, section, idx) {
   if (page && typeof page === "object") {
     return {
       role: page.role || "content",
@@ -518,7 +572,7 @@ function normalizeInsertedPageSpec(page, idx) {
       content: Array.isArray(page.content) ? page.content : [],
     };
   }
-  return sectionToPageSpec(S.sections[idx] || "", idx);
+  return sectionToPageSpec(section || "", idx);
 }
 
 function renumberSessionSections() {
@@ -535,6 +589,7 @@ function checkDeckAfterPatch(app) {
       page: i + 1,
       card_overflows: !!(card.scrollHeight && card.clientHeight && card.scrollHeight > card.clientHeight + 1),
       main_overflows: !!(main && main.scrollHeight && main.clientHeight && main.scrollHeight > main.clientHeight + 1),
+      overlaps: detectContentOverlaps(card),
       card_height: Math.round(card.clientHeight || 0),
       card_scroll_height: Math.round(card.scrollHeight || 0),
       main_height: main ? Math.round(main.clientHeight || 0) : null,
@@ -542,6 +597,9 @@ function checkDeckAfterPatch(app) {
     };
     if (page.card_overflows || page.main_overflows) {
       report.errors.push("第 " + (i + 1) + " 页内容溢出卡片或正文区域。");
+    }
+    if (page.overlaps.length) {
+      report.errors.push("第 " + (i + 1) + " 页存在内容重叠：" + page.overlaps.map((item) => item.a + " 与 " + item.b).join("；"));
     }
     report.pages.push(page);
   });
@@ -557,6 +615,7 @@ function formatDeckPatchDone(result, report) {
   const parts = [];
   if (result.styleChanged) parts.push("全局样式已更新");
   if (result.changedPages.length) parts.push("已更新第 " + Array.from(new Set(result.changedPages)).sort((a, b) => a - b).join("、") + " 页");
+  if (result.movedPages && result.movedPages.length) parts.push("已移动第 " + Array.from(new Set(result.movedPages)).sort((a, b) => a - b).join("、") + " 页");
   if (result.insertedPages) parts.push("新增 " + result.insertedPages + " 页");
   if (result.deletedPages) parts.push("删除 " + result.deletedPages + " 页");
   if (!parts.length) parts.push("deck 已更新");
@@ -709,6 +768,7 @@ function deckLayoutMetrics(app) {
       components: Array.from(card.querySelectorAll(".cm-cell,.cm-grid,.cm-split,.cm-row,.cm-col,.cm-flow,.cm-feature-row,.cm-callout,.cm-band,.cm-mosaic,.cm-bento,.cm-compare,.cm-compare-col,.cm-process,.cm-step,.cm-insight,.cm-pullquote,.cm-metric-row,.cm-mini-card,.cm-stat,.cm-checklist,.cm-tag,.cm-chip,svg,[class*=\"icon\"],[class*=\"Icon\"],[class*=\"mark\"],[class*=\"Mark\"],[class*=\"bullet\"],[class*=\"Bullet\"]"))
         .slice(0, 20)
         .map((node) => elementMetrics(node, card)),
+      overlaps: detectContentOverlaps(card),
       overflow: {
         card_scroll_height: Math.round(card.scrollHeight || 0),
         card_client_height: Math.round(card.clientHeight || 0),
@@ -784,6 +844,77 @@ function elementMetrics(node, card) {
     background: cs.backgroundColor,
     text: compactText(node.textContent || "").slice(0, 240),
   };
+}
+
+// 检测主内容区内的独立内容块是否发生视觉重叠，给 LLM 明确的坐标证据。
+function detectContentOverlaps(card) {
+  if (!card) return [];
+  const nodes = overlapCandidateNodes(card);
+  const boxes = nodes.map((node) => {
+    const m = elementMetrics(node, card);
+    if (!m || m.width < 4 || m.height < 4) return null;
+    return { node, metrics: m, area: m.width * m.height };
+  }).filter(Boolean);
+  const overlaps = [];
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i], b = boxes[j];
+      if (a.node.contains(b.node) || b.node.contains(a.node)) continue;
+      const hit = overlapBox(a.metrics, b.metrics);
+      if (!hit) continue;
+      const minArea = Math.max(1, Math.min(a.area, b.area));
+      if (hit.area < 64 || hit.area / minArea < 0.08) continue;
+      overlaps.push({
+        a: a.metrics.selector,
+        b: b.metrics.selector,
+        a_text: a.metrics.text,
+        b_text: b.metrics.text,
+        intersection: { x: hit.x, y: hit.y, width: hit.width, height: hit.height, area: hit.area },
+      });
+      if (overlaps.length >= 12) return overlaps;
+    }
+  }
+  return overlaps;
+}
+
+function overlapCandidateNodes(card) {
+  const selectors = [
+    ".cm-main > *",
+    ".cm-main .cm-cell",
+    ".cm-main .cm-mini-card",
+    ".cm-main .cm-callout",
+    ".cm-main .cm-band",
+    ".cm-main .cm-bento",
+    ".cm-main .cm-feature-row",
+    ".cm-main .cm-insight",
+    ".cm-main .cm-pullquote",
+    ".cm-main .cm-process",
+    ".cm-main .cm-step",
+    ".cm-main .cm-checklist",
+    ".cm-main ul",
+    ".cm-main ol",
+  ];
+  return Array.from(new Set(selectors.flatMap((sel) => Array.from(card.querySelectorAll(sel)))))
+    .filter((node) => isVisibleBox(node));
+}
+
+function isVisibleBox(node) {
+  if (!node || typeof getComputedStyle === "undefined") return false;
+  const cs = getComputedStyle(node);
+  if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity || "1") === 0) return false;
+  const rect = node.getBoundingClientRect();
+  return rect.width > 3 && rect.height > 3;
+}
+
+function overlapBox(a, b) {
+  const x1 = Math.max(a.x, b.x);
+  const y1 = Math.max(a.y, b.y);
+  const x2 = Math.min(a.x + a.width, b.x + b.width);
+  const y2 = Math.min(a.y + a.height, b.y + b.height);
+  const width = round2(x2 - x1);
+  const height = round2(y2 - y1);
+  if (width <= 0 || height <= 0) return null;
+  return { x: round2(x1), y: round2(y1), width, height, area: round2(width * height) };
 }
 
 function elementSelectorLabel(node) {

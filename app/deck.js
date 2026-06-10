@@ -68,6 +68,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   var CDN = {
     htmlToImage: "https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js",
     jszip: "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
+    jspdf: "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
   };
   var EXPORT_TEXT_SCALE = 0.95;
 
@@ -241,6 +242,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.btnSave = el("button", "cm-btn", "导出 HTML");
     this.btnExport = el("button", "cm-btn", "当前页导出 PNG");
     this.btnExportAll = el("button", "cm-btn cm-primary", "打包导出 PNG");
+    this.btnExportPdf = el("button", "cm-btn", "导出 PDF");
     this.fileImport = el("input");
     this.fileImport.type = "file";
     this.fileImport.accept = ".html,.htm,text/html";
@@ -253,6 +255,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
       bar.appendChild(this.btnSave);
       bar.appendChild(this.btnExport);
       bar.appendChild(this.btnExportAll);
+      bar.appendChild(this.btnExportPdf);
     }
 
     // 主体（编辑器 + 舞台）
@@ -304,6 +307,7 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
     this.btnPresent.onclick = function () { self.present(); };
     this.btnExport.onclick = function () { self.exportCurrent(); };
     this.btnExportAll.onclick = function () { self.exportAll(); };
+    this.btnExportPdf.onclick = function () { self.exportPdf(); };
     this.btnEdit.onclick = function () { self.toggleEditor(); };
     this.btnImport.onclick = function () { self.fileImport.click(); };
     this.fileImport.onchange = function () { self._handleImportFile(self.fileImport.files && self.fileImport.files[0]); };
@@ -743,10 +747,11 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
   };
 
   // ---------- 出图 ----------
-  CardMaker.prototype._ensureLibs = function (needZip) {
+  CardMaker.prototype._ensureLibs = function (needZip, needPdf) {
     var jobs = [];
     if (!global.htmlToImage) jobs.push(loadScript(CDN.htmlToImage));
     if (needZip && !global.JSZip) jobs.push(loadScript(CDN.jszip));
+    if (needPdf && !(global.jspdf && global.jspdf.jsPDF)) jobs.push(loadScript(CDN.jspdf));
     // 等 web 字体加载完成，确保导出时能正确嵌入（否则出图会回退系统字体）
     if (document.fonts && document.fonts.ready) jobs.push(document.fonts.ready);
     return Promise.all(jobs);
@@ -880,6 +885,40 @@ const global = window; // 保留内部 global.xxx 引用；ES module 顶层无 I
         self._toast("已导出全部，共 " + self.cards.length + " 张");
       })
       .catch(function (err) { self._toast("导出失败：" + err.message); });
+  };
+
+  CardMaker.prototype.exportPdf = function () {
+    var self = this;
+    if (!this.cards.length) return;
+    var p = PRESETS[this.preset];
+    this._toast("正在生成 PDF…");
+    this._ensureLibs(false, true)
+      .then(function () {
+        var jsPDF = global.jspdf && global.jspdf.jsPDF;
+        if (!jsPDF) throw new Error("jsPDF 加载失败");
+        var pdf = new jsPDF({
+          orientation: p.w >= p.h ? "landscape" : "portrait",
+          unit: "px",
+          format: [p.w, p.h],
+          compress: true,
+        });
+        var seq = Promise.resolve();
+        self.cards.forEach(function (card, i) {
+          seq = seq
+            .then(function () { return self._snap(card); })
+            .then(function (url) {
+              if (i > 0) pdf.addPage([p.w, p.h], p.w >= p.h ? "landscape" : "portrait");
+              pdf.addImage(url, "PNG", 0, 0, p.w, p.h, undefined, "FAST");
+              self._toast("已渲染 PDF " + (i + 1) + "/" + self.cards.length);
+            });
+        });
+        return seq.then(function () { return pdf.output("blob"); });
+      })
+      .then(function (blob) {
+        download(URL.createObjectURL(blob), slug(self.title) + ".pdf");
+        self._toast("已导出 PDF，共 " + self.cards.length + " 页");
+      })
+      .catch(function (err) { self._toast("PDF 导出失败：" + err.message); });
   };
 
   function slug(s) {
